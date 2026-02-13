@@ -1,0 +1,11 @@
+apiVersion: synack.synadia.io/v1alpha1
+kind: Stream
+metadata:
+  name: orders-by-nkey
+  namespace: default
+spec:
+  systemId: SYSTEM_ID_HERE
+  accountPublicNKey: ACCOUNT_PUBLIC_NKEY_HERE
+  name: ORDERS
+  subjects:
+    - orders.>

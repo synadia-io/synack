@@ -1,0 +1,10 @@
+apiVersion: synack.synadia.io/v1alpha1
+kind: Stream
+metadata:
+  name: orders
+  namespace: default
+spec:
+  accountId: ACCOUNT_ID_HERE
+  name: ORDERS
+  subjects:
+    - orders.>
