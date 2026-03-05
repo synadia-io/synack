@@ -6,19 +6,7 @@ import (
 
 // StreamSpec captures desired Stream behavior in Control Plane terms.
 type StreamSpec struct {
-	// AccountID identifies the target Control Plane account ID.
-	AccountID string `json:"accountId,omitempty"`
-
-	// AccountPublicNKey identifies the target account by public NKEY.
-	// When this is set, SystemID must also be set so lookup can be scoped.
-	AccountPublicNKey string `json:"accountPublicNKey,omitempty"`
-
-	// SystemID scopes AccountPublicNKey resolution to a specific system.
-	SystemID string `json:"systemId,omitempty"`
-
-	// Account is a legacy alias for AccountID.
-	// Deprecated: prefer accountId.
-	Account string `json:"account,omitempty"`
+	AccountSelector `json:",inline"`
 
 	// StreamID optionally pins this resource to an existing Control Plane stream ID.
 	// When set, reconciliation will try this ID first before name-based lookup.
@@ -70,7 +58,7 @@ type StreamSpec struct {
 	DuplicateWindow string `json:"duplicateWindow,omitempty"`
 
 	// Placement controls cluster and tag placement requirements.
-	Placement *StreamPlacement `json:"placement,omitempty"`
+	Placement *Placement `json:"placement,omitempty"`
 
 	// Sources defines stream sources.
 	Sources []StreamSource `json:"sources,omitempty"`
@@ -107,12 +95,6 @@ type StreamSpec struct {
 
 	// Metadata stores arbitrary stream metadata.
 	Metadata map[string]string `json:"metadata,omitempty"`
-}
-
-// StreamPlacement describes stream placement requirements.
-type StreamPlacement struct {
-	Cluster string   `json:"cluster"`
-	Tags    []string `json:"tags,omitempty"`
 }
 
 // SubjectTransform describes a source/destination subject transform.

@@ -2,15 +2,19 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/synadia-io/control-plane-sdk-go/syncp"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	natsv1alpha1 "github.com/synadia-io/synack/api/v1alpha1"
 	"github.com/synadia-io/synack/internal/controlplane"
@@ -28,6 +32,7 @@ const streamFinalizer = "synack.synadia.io/stream-finalizer"
 // +kubebuilder:rbac:groups=synack.synadia.io,resources=streams,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=synack.synadia.io,resources=streams/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=synack.synadia.io,resources=streams/finalizers,verbs=update
+// +kubebuilder:rbac:groups=synack.synadia.io,resources=accounts,verbs=get;list;watch
 
 func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
@@ -47,8 +52,6 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	if !stream.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&stream, streamFinalizer) {
-			// If we never recorded a backend stream ID, this resource was never
-			// successfully reconciled/applied, so finalize locally.
 			if stream.Status.StreamID == "" {
 				if ok := controllerutil.RemoveFinalizer(&stream, streamFinalizer); !ok {
 					return ctrl.Result{}, nil
@@ -60,12 +63,13 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			}
 
 			if err := r.ControlPlane.DeleteStream(ctx, controlplane.StreamInput{
-				AccountID:         stream.Spec.AccountID,
-				AccountPublicNKey: stream.Spec.AccountPublicNKey,
-				SystemID:          stream.Spec.SystemID,
-				Account:           stream.Spec.Account,
-				StreamID:          knownStreamID,
-				Name:              stream.Spec.Name,
+				AccountSelectors: controlplane.AccountSelectors{
+					AccountID:         stream.Spec.AccountID,
+					AccountPublicNKey: stream.Spec.AccountPublicNKey,
+					SystemID:          stream.Spec.SystemID,
+				},
+				StreamID: knownStreamID,
+				Name:     stream.Spec.Name,
 			}); err != nil {
 				l.Error(err, "control plane delete failed")
 				stream.Status.Message = err.Error()
@@ -93,11 +97,31 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	if err := validateAccountSelectors(stream.Spec.AccountSelector); err != nil {
+		stream.Status.Message = err.Error()
+		_ = r.Status().Update(ctx, &stream)
+		return ctrl.Result{}, nil
+	}
+
+	accountID, err := resolveAccountRef(ctx, r.Client, stream.Namespace, stream.Spec.AccountSelector)
+	if err != nil {
+		if errors.Is(err, errWaitingForAccount) {
+			stream.Status.Message = err.Error()
+			_ = r.Status().Update(ctx, &stream)
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+		l.Error(err, "failed to resolve account for stream")
+		stream.Status.Message = err.Error()
+		_ = r.Status().Update(ctx, &stream)
+		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+	}
+
 	out, err := r.ControlPlane.EnsureStream(ctx, controlplane.StreamInput{
-		AccountID:         stream.Spec.AccountID,
-		AccountPublicNKey: stream.Spec.AccountPublicNKey,
-		SystemID:          stream.Spec.SystemID,
-		Account:           stream.Spec.Account,
+		AccountSelectors: controlplane.AccountSelectors{
+			AccountID:         accountID,
+			AccountPublicNKey: stream.Spec.AccountPublicNKey,
+			SystemID:          stream.Spec.SystemID,
+		},
 		StreamID:          knownStreamID,
 		Name:              stream.Spec.Name,
 		Subjects:          stream.Spec.Subjects,
@@ -114,11 +138,11 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		Replicas:          stream.Spec.Replicas,
 		NoAck:             stream.Spec.NoAck,
 		DuplicateWindow:   stream.Spec.DuplicateWindow,
-		Placement:         toControlPlanePlacement(stream.Spec.Placement),
-		Sources:           toControlPlaneSources(stream.Spec.Sources),
+		Placement:         toSCPPlacement(stream.Spec.Placement),
+		Sources:           toSCPStreamSources(stream.Spec.Sources),
 		Compression:       stream.Spec.Compression,
-		SubjectTransform:  toControlPlaneSubjectTransform(stream.Spec.SubjectTransform),
-		RePublish:         toControlPlaneRePublish(stream.Spec.RePublish),
+		SubjectTransform:  toSCPSubjectTransform(stream.Spec.SubjectTransform),
+		RePublish:         toSCPRePublish(stream.Spec.RePublish),
 		Sealed:            stream.Spec.Sealed,
 		DenyDelete:        stream.Spec.DenyDelete,
 		DenyPurge:         stream.Spec.DenyPurge,
@@ -153,35 +177,69 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 func (r *StreamReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&natsv1alpha1.Stream{}).
+		Watches(&natsv1alpha1.Account{}, handler.EnqueueRequestsFromMapFunc(r.enqueueStreamsForAccount)).
 		Complete(r)
 }
 
-func toControlPlanePlacement(in *natsv1alpha1.StreamPlacement) *syncp.Placement {
+func (r *StreamReconciler) enqueueStreamsForAccount(ctx context.Context, obj client.Object) []reconcile.Request {
+	account, ok := obj.(*natsv1alpha1.Account)
+	if !ok {
+		return nil
+	}
+
+	var streams natsv1alpha1.StreamList
+	if err := r.List(ctx, &streams, client.InNamespace(account.Namespace)); err != nil {
+		return nil
+	}
+
+	requests := make([]reconcile.Request, 0)
+	for _, stream := range streams.Items {
+		if stream.Spec.AccountRef == nil {
+			continue
+		}
+		if stream.Spec.AccountRef.Name != account.Name {
+			continue
+		}
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Namespace: stream.Namespace,
+				Name:      stream.Name,
+			},
+		})
+	}
+	return requests
+}
+
+func toSCPPlacement(in *natsv1alpha1.Placement) *syncp.Placement {
 	if in == nil {
 		return nil
 	}
+
 	return &syncp.Placement{
 		Cluster: in.Cluster,
 		Tags:    in.Tags,
 	}
 }
 
-func toControlPlaneSubjectTransform(in *natsv1alpha1.SubjectTransform) *syncp.SubjectTransformConfig {
+func toSCPSubjectTransform(in *natsv1alpha1.SubjectTransform) *syncp.SubjectTransformConfig {
 	if in == nil {
 		return nil
 	}
+
 	return &syncp.SubjectTransformConfig{
 		Src:  in.Source,
 		Dest: in.Dest,
 	}
 }
 
-func toControlPlaneRePublish(in *natsv1alpha1.RePublish) *syncp.RePublish {
+func toSCPRePublish(in *natsv1alpha1.RePublish) *syncp.RePublish {
 	if in == nil {
 		return nil
 	}
+
 	src := in.Source
 	headersOnly := in.HeadersOnly
+
 	return &syncp.RePublish{
 		Src:         &src,
 		Dest:        in.Destination,
@@ -189,7 +247,20 @@ func toControlPlaneRePublish(in *natsv1alpha1.RePublish) *syncp.RePublish {
 	}
 }
 
-func toControlPlaneSources(in []natsv1alpha1.StreamSource) []syncp.StreamSource {
+func toSCPStreamSourcePtr(in *natsv1alpha1.StreamSource) *syncp.StreamSource {
+	if in == nil {
+		return nil
+	}
+
+	sources := toSCPStreamSources([]natsv1alpha1.StreamSource{*in})
+	if len(sources) == 0 {
+		return nil
+	}
+
+	return &sources[0]
+}
+
+func toSCPStreamSources(in []natsv1alpha1.StreamSource) []syncp.StreamSource {
 	if len(in) == 0 {
 		return nil
 	}
@@ -203,10 +274,12 @@ func toControlPlaneSources(in []natsv1alpha1.StreamSource) []syncp.StreamSource 
 		if src.FilterSubject != "" {
 			cpSource.FilterSubject = &src.FilterSubject
 		}
+
 		if src.OptStartSeq > 0 {
 			optStartSeq := uint64(src.OptStartSeq)
 			cpSource.OptStartSeq = &optStartSeq
 		}
+
 		if src.OptStartTime != "" {
 			optStartTime := syncp.NewNullable(src.OptStartTime)
 			cpSource.OptStartTime = &optStartTime

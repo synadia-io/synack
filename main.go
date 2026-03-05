@@ -75,6 +75,27 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		os.Exit(1)
 	}
+	if err := (&controllers.KeyValueReconciler{
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		ControlPlane: cpClient,
+	}).SetupWithManager(mgr); err != nil {
+		os.Exit(1)
+	}
+	if err := (&controllers.ObjectStoreReconciler{
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		ControlPlane: cpClient,
+	}).SetupWithManager(mgr); err != nil {
+		os.Exit(1)
+	}
+	if err := (&controllers.ConsumerReconciler{
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		ControlPlane: cpClient,
+	}).SetupWithManager(mgr); err != nil {
+		os.Exit(1)
+	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		os.Exit(1)
