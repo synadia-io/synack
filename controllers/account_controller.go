@@ -19,8 +19,9 @@ import (
 // AccountReconciler reconciles an Account object.
 type AccountReconciler struct {
 	client.Client
-	Scheme       *runtime.Scheme
-	ControlPlane controlplane.Client
+	Scheme          *runtime.Scheme
+	ControlPlane    controlplane.Client
+	RequeueInterval time.Duration
 }
 
 const accountFinalizer = "synack.synadia.io/account-finalizer"
@@ -117,6 +118,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return requeueReconcileErr, nil
 	}
 
+	specChanged := false
 	if diff, err := diffState(appliedState, desiredState); err != nil {
 		l.Error(err, "failed to diff account state")
 		account.Status.Message = err.Error()
@@ -126,6 +128,29 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return requeueReconcileErr, nil
 	} else if diff != "" {
 		logStateDiff(l, "account", diff)
+		specChanged = true
+	}
+
+	if !specChanged && account.Status.AccountID != "" {
+		serverState, found, err := r.ControlPlane.ReadAccountState(ctx, in)
+		if err != nil {
+			l.Error(err, "failed to read account server state")
+			return requeueReconcileErr, nil
+		}
+
+		lastServerState := loadAnnotation(&account, accountServerStateAnnotation)
+		if found && lastServerState != nil {
+			diff, err := diffState(serverState, lastServerState)
+			if err != nil {
+				l.Error(err, "failed to diff server state")
+			} else if diff == "" {
+				return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
+			} else {
+				l.Info("server-side drift detected for account. Reverting...\n" + diff)
+			}
+		} else if !found {
+			l.Info("account not found on server, will re-create")
+		}
 	}
 
 	out, err := r.ControlPlane.EnsureAccount(ctx, in)
@@ -150,13 +175,23 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
-	if setAnnotations(&account, accountAppliedStateAnnotation, desiredState) {
+	readIn := in
+	readIn.AccountID = out.AccountID
+	newServerState, _, _ := r.ControlPlane.ReadAccountState(ctx, readIn)
+
+	annotationsChanged := setAnnotations(&account, accountAppliedStateAnnotation, desiredState)
+	if newServerState != nil {
+		if setAnnotations(&account, accountServerStateAnnotation, newServerState) {
+			annotationsChanged = true
+		}
+	}
+	if annotationsChanged {
 		if err := r.Update(ctx, &account); err != nil {
 			return requeueOnConflict(err)
 		}
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 }
 
 func (r *AccountReconciler) SetupWithManager(mgr ctrl.Manager) error {

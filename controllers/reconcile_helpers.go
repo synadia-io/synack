@@ -23,6 +23,12 @@ const (
 	keyValueAppliedStateAnnotation    = "synack.synadia.io/last-applied-keyvalue-input"
 	objectStoreAppliedStateAnnotation = "synack.synadia.io/last-applied-objectstore-input"
 	consumerAppliedStateAnnotation    = "synack.synadia.io/last-applied-consumer-input"
+
+	accountServerStateAnnotation     = "synack.synadia.io/last-server-account-state"
+	streamServerStateAnnotation      = "synack.synadia.io/last-server-stream-state"
+	keyValueServerStateAnnotation    = "synack.synadia.io/last-server-keyvalue-state"
+	objectStoreServerStateAnnotation = "synack.synadia.io/last-server-objectstore-state"
+	consumerServerStateAnnotation    = "synack.synadia.io/last-server-consumer-state"
 )
 
 func requeueOnConflict(err error) (ctrl.Result, error) {

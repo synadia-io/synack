@@ -31,8 +31,9 @@ var (
 // ConsumerReconciler reconciles a Consumer object.
 type ConsumerReconciler struct {
 	client.Client
-	Scheme       *runtime.Scheme
-	ControlPlane controlplane.Client
+	Scheme          *runtime.Scheme
+	ControlPlane    controlplane.Client
+	RequeueInterval time.Duration
 }
 
 const consumerFinalizer = "synack.synadia.io/consumer-finalizer"
@@ -155,6 +156,7 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return requeueReconcileErr, nil
 	}
 
+	specChanged := false
 	if diff, err := diffState(appliedState, desiredState); err != nil {
 		l.Error(err, "failed to diff consumer state")
 		consumer.Status.Message = err.Error()
@@ -164,6 +166,29 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return requeueReconcileErr, nil
 	} else if diff != "" {
 		logStateDiff(l, "consumer", diff)
+		specChanged = true
+	}
+
+	if !specChanged && consumer.Status.ConsumerID != "" {
+		serverState, found, err := r.ControlPlane.ReadConsumerState(ctx, in)
+		if err != nil {
+			l.Error(err, "failed to read consumer server state")
+			return requeueReconcileErr, nil
+		}
+
+		lastServerState := loadAnnotation(&consumer, consumerServerStateAnnotation)
+		if found && lastServerState != nil {
+			diff, err := diffState(serverState, lastServerState)
+			if err != nil {
+				l.Error(err, "failed to diff server state")
+			} else if diff == "" {
+				return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
+			} else {
+				l.Info("server-side drift detected for consumer. Reverting...\n" + diff)
+			}
+		} else if !found {
+			l.Info("consumer not found on server, will re-create")
+		}
 	}
 
 	out, err := r.ControlPlane.EnsureConsumer(ctx, in)
@@ -189,13 +214,23 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
-	if setAnnotations(&consumer, consumerAppliedStateAnnotation, desiredState) {
+	readIn := in
+	readIn.ConsumerID = out.ConsumerID
+	newServerState, _, _ := r.ControlPlane.ReadConsumerState(ctx, readIn)
+
+	annotationsChanged := setAnnotations(&consumer, consumerAppliedStateAnnotation, desiredState)
+	if newServerState != nil {
+		if setAnnotations(&consumer, consumerServerStateAnnotation, newServerState) {
+			annotationsChanged = true
+		}
+	}
+	if annotationsChanged {
 		if err := r.Update(ctx, &consumer); err != nil {
 			return requeueOnConflict(err)
 		}
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 }
 
 func (r *ConsumerReconciler) SetupWithManager(mgr ctrl.Manager) error {

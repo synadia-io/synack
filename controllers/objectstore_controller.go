@@ -23,8 +23,9 @@ import (
 // ObjectStoreReconciler reconciles an ObjectStore object.
 type ObjectStoreReconciler struct {
 	client.Client
-	Scheme       *runtime.Scheme
-	ControlPlane controlplane.Client
+	Scheme          *runtime.Scheme
+	ControlPlane    controlplane.Client
+	RequeueInterval time.Duration
 }
 
 const objectStoreFinalizer = "synack.synadia.io/objectstore-finalizer"
@@ -158,6 +159,7 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return requeueReconcileErr, nil
 	}
 
+	specChanged := false
 	if diff, err := diffState(appliedState, desiredState); err != nil {
 		l.Error(err, "failed to diff object store state")
 		obj.Status.Message = err.Error()
@@ -167,6 +169,29 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return requeueReconcileErr, nil
 	} else if diff != "" {
 		logStateDiff(l, "object store", diff)
+		specChanged = true
+	}
+
+	if !specChanged && obj.Status.ObjectStoreID != "" {
+		serverState, found, err := r.ControlPlane.ReadObjectStoreState(ctx, in)
+		if err != nil {
+			l.Error(err, "failed to read object store server state")
+			return requeueReconcileErr, nil
+		}
+
+		lastServerState := loadAnnotation(&obj, objectStoreServerStateAnnotation)
+		if found && lastServerState != nil {
+			diff, err := diffState(serverState, lastServerState)
+			if err != nil {
+				l.Error(err, "failed to diff server state")
+			} else if diff == "" {
+				return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
+			} else {
+				l.Info("server-side drift detected for object store. Reverting...\n" + diff)
+			}
+		} else if !found {
+			l.Info("object store not found on server, will re-create")
+		}
 	}
 
 	out, err := r.ControlPlane.EnsureObjectStore(ctx, in)
@@ -191,13 +216,23 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 
-	if setAnnotations(&obj, objectStoreAppliedStateAnnotation, desiredState) {
+	readIn := in
+	readIn.ObjectStoreID = out.ObjectStoreID
+	newServerState, _, _ := r.ControlPlane.ReadObjectStoreState(ctx, readIn)
+
+	annotationsChanged := setAnnotations(&obj, objectStoreAppliedStateAnnotation, desiredState)
+	if newServerState != nil {
+		if setAnnotations(&obj, objectStoreServerStateAnnotation, newServerState) {
+			annotationsChanged = true
+		}
+	}
+	if annotationsChanged {
 		if err := r.Update(ctx, &obj); err != nil {
 			return requeueOnConflict(err)
 		}
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 }
 
 func (r *ObjectStoreReconciler) SetupWithManager(mgr ctrl.Manager) error {

@@ -25,8 +25,9 @@ import (
 // StreamReconciler reconciles a Stream object.
 type StreamReconciler struct {
 	client.Client
-	Scheme       *runtime.Scheme
-	ControlPlane controlplane.Client
+	Scheme          *runtime.Scheme
+	ControlPlane    controlplane.Client
+	RequeueInterval time.Duration
 }
 
 const streamFinalizer = "synack.synadia.io/stream-finalizer"
@@ -197,6 +198,7 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return requeueReconcileErr, nil
 	}
 
+	specChanged := false
 	if diff, err := diffState(appliedState, desiredState); err != nil {
 		l.Error(err, "failed to diff stream state")
 		stream.Status.Message = err.Error()
@@ -206,6 +208,29 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return requeueReconcileErr, nil
 	} else if diff != "" {
 		logStateDiff(l, "stream", diff)
+		specChanged = true
+	}
+
+	if !specChanged && stream.Status.StreamID != "" {
+		serverState, found, err := r.ControlPlane.ReadStreamState(ctx, in)
+		if err != nil {
+			l.Error(err, "failed to read stream server state")
+			return requeueReconcileErr, nil
+		}
+
+		lastServerState := loadAnnotation(&stream, streamServerStateAnnotation)
+		if found && lastServerState != nil {
+			diff, err := diffState(serverState, lastServerState)
+			if err != nil {
+				l.Error(err, "failed to diff server state")
+			} else if diff == "" {
+				return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
+			} else {
+				l.Info("server-side drift detected for stream. Reverting...\n" + diff)
+			}
+		} else if !found {
+			l.Info("stream not found on server, will re-create")
+		}
 	}
 
 	out, err := r.ControlPlane.EnsureStream(ctx, in)
@@ -230,13 +255,23 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 	}
 
-	if setAnnotations(&stream, streamAppliedStateAnnotation, desiredState) {
+	readIn := in
+	readIn.StreamID = out.StreamID
+	newServerState, _, _ := r.ControlPlane.ReadStreamState(ctx, readIn)
+
+	annotationsChanged := setAnnotations(&stream, streamAppliedStateAnnotation, desiredState)
+	if newServerState != nil {
+		if setAnnotations(&stream, streamServerStateAnnotation, newServerState) {
+			annotationsChanged = true
+		}
+	}
+	if annotationsChanged {
 		if err := r.Update(ctx, &stream); err != nil {
 			return requeueOnConflict(err)
 		}
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 }
 
 func (r *StreamReconciler) SetupWithManager(mgr ctrl.Manager) error {

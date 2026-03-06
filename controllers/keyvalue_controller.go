@@ -23,8 +23,9 @@ import (
 // KeyValueReconciler reconciles a KeyValue object.
 type KeyValueReconciler struct {
 	client.Client
-	Scheme       *runtime.Scheme
-	ControlPlane controlplane.Client
+	Scheme          *runtime.Scheme
+	ControlPlane    controlplane.Client
+	RequeueInterval time.Duration
 }
 
 const keyValueFinalizer = "synack.synadia.io/keyvalue-finalizer"
@@ -162,6 +163,7 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return requeueReconcileErr, nil
 	}
 
+	specChanged := false
 	if diff, err := diffState(appliedState, desiredState); err != nil {
 		l.Error(err, "failed to diff keyvalue state")
 		kv.Status.Message = err.Error()
@@ -171,6 +173,29 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return requeueReconcileErr, nil
 	} else if diff != "" {
 		logStateDiff(l, "keyvalue", diff)
+		specChanged = true
+	}
+
+	if !specChanged && kv.Status.KeyValueID != "" {
+		serverState, found, err := r.ControlPlane.ReadKeyValueState(ctx, in)
+		if err != nil {
+			l.Error(err, "failed to read keyvalue server state")
+			return requeueReconcileErr, nil
+		}
+
+		lastServerState := loadAnnotation(&kv, keyValueServerStateAnnotation)
+		if found && lastServerState != nil {
+			diff, err := diffState(serverState, lastServerState)
+			if err != nil {
+				l.Error(err, "failed to diff server state")
+			} else if diff == "" {
+				return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
+			} else {
+				l.Info("server-side drift detected for keyvalue. Reverting...\n" + diff)
+			}
+		} else if !found {
+			l.Info("keyvalue not found on server, will re-create")
+		}
 	}
 
 	out, err := r.ControlPlane.EnsureKeyValue(ctx, in)
@@ -195,13 +220,23 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
-	if setAnnotations(&kv, keyValueAppliedStateAnnotation, desiredState) {
+	readIn := in
+	readIn.KeyValueID = out.KeyValueID
+	newServerState, _, _ := r.ControlPlane.ReadKeyValueState(ctx, readIn)
+
+	annotationsChanged := setAnnotations(&kv, keyValueAppliedStateAnnotation, desiredState)
+	if newServerState != nil {
+		if setAnnotations(&kv, keyValueServerStateAnnotation, newServerState) {
+			annotationsChanged = true
+		}
+	}
+	if annotationsChanged {
 		if err := r.Update(ctx, &kv); err != nil {
 			return requeueOnConflict(err)
 		}
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 }
 
 func (r *KeyValueReconciler) SetupWithManager(mgr ctrl.Manager) error {
