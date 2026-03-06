@@ -163,7 +163,7 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		return requeueReconcileErr, nil
 	} else if diff != "" {
-		l.Info("consumer desired state changed", "diff", diff)
+		logStateDiff(l, "consumer", diff)
 	}
 
 	out, err := r.ControlPlane.EnsureConsumer(ctx, in)

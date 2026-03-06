@@ -43,6 +43,16 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if !account.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&account, accountFinalizer) {
 
+			// Block deletion until all dependent resources are removed
+			if err := checkAccountDependents(ctx, r.Client, account.Namespace, account.Name); err != nil {
+				l.Info(err.Error())
+				account.Status.Message = err.Error()
+				if err := r.Status().Update(ctx, &account); err != nil {
+					l.Error(err, "failed to update account status")
+				}
+				return requeueWaitingForResource, nil
+			}
+
 			// If we never had an account ID, this resource was never fully reconciled
 			if account.Status.AccountID == "" {
 				if ok := controllerutil.RemoveFinalizer(&account, accountFinalizer); !ok {
@@ -115,7 +125,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 		return requeueReconcileErr, nil
 	} else if diff != "" {
-		l.Info("account desired state changed", "diff", diff)
+		logStateDiff(l, "account", diff)
 	}
 
 	out, err := r.ControlPlane.EnsureAccount(ctx, in)

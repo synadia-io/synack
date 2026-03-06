@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/synadia-io/control-plane-sdk-go/syncp"
@@ -53,6 +54,23 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	if !stream.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&stream, streamFinalizer) {
+
+			// Block deletion until all dependent consumers are removed
+			hasDeps, err := hasDependentConsumers(ctx, r.Client, stream.Namespace, stream.Name)
+			if err != nil {
+				l.Error(err, "failed to check dependent consumers")
+				return requeueReconcileErr, nil
+			}
+
+			if hasDeps {
+				msg := fmt.Sprintf("waiting for dependent Consumers to be deleted before removing Stream %q", stream.Name)
+				l.Info(msg)
+				stream.Status.Message = msg
+				if err := r.Status().Update(ctx, &stream); err != nil {
+					l.Error(err, "failed to update stream status")
+				}
+				return requeueWaitingForResource, nil
+			}
 
 			// If we never had a stream ID, this resource was never fully reconciled
 			if stream.Status.StreamID == "" {
@@ -187,7 +205,7 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 		return requeueReconcileErr, nil
 	} else if diff != "" {
-		l.Info("stream desired state changed", "diff", diff)
+		logStateDiff(l, "stream", diff)
 	}
 
 	out, err := r.ControlPlane.EnsureStream(ctx, in)

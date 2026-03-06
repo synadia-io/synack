@@ -170,7 +170,7 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		return requeueReconcileErr, nil
 	} else if diff != "" {
-		l.Info("keyvalue desired state changed", "diff", diff)
+		logStateDiff(l, "keyvalue", diff)
 	}
 
 	out, err := r.ControlPlane.EnsureKeyValue(ctx, in)

@@ -166,7 +166,7 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		return requeueReconcileErr, nil
 	} else if diff != "" {
-		l.Info("object store desired state changed", "diff", diff)
+		logStateDiff(l, "object store", diff)
 	}
 
 	out, err := r.ControlPlane.EnsureObjectStore(ctx, in)
