@@ -37,7 +37,9 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	flag.StringVar(&cpBaseURL, "control-plane-base-url", "", "Control Plane API base URL, for example https://cp.example.net.")
 
-	opts := zap.Options{Development: true}
+	opts := zap.Options{
+		Development: true,
+	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 

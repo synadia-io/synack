@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	natsv1alpha1 "github.com/synadia-io/synack/api/v1alpha1"
+	natsv1 "github.com/synadia-io/synack/api/v1alpha1"
 	"github.com/synadia-io/synack/internal/controlplane"
 )
 
@@ -35,7 +36,7 @@ const keyValueFinalizer = "synack.synadia.io/keyvalue-finalizer"
 func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
 
-	var kv natsv1alpha1.KeyValue
+	var kv natsv1.KeyValue
 	if err := r.Get(ctx, req.NamespacedName, &kv); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -50,6 +51,8 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	if !kv.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&kv, keyValueFinalizer) {
+
+			// If we never had a KV ID, this resource was never fully reconciled
 			if kv.Status.KeyValueID == "" {
 				if ok := controllerutil.RemoveFinalizer(&kv, keyValueFinalizer); !ok {
 					return ctrl.Result{}, nil
@@ -69,19 +72,23 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				KeyValueID: knownID,
 				Bucket:     kv.Spec.Bucket,
 			}); err != nil {
-				l.Error(err, "control plane delete failed")
+				l.Error(err, "keyvalue delete failed")
 				kv.Status.Message = err.Error()
-				_ = r.Status().Update(ctx, &kv)
-				return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+				if err := r.Status().Update(ctx, &kv); err != nil {
+					l.Error(err, "failed to update keyvalue status")
+				}
+				return requeueReconcileErr, nil
 			}
 
 			if ok := controllerutil.RemoveFinalizer(&kv, keyValueFinalizer); !ok {
 				return ctrl.Result{}, nil
 			}
+
 			if err := r.Update(ctx, &kv); err != nil {
 				return requeueOnConflict(err)
 			}
 		}
+
 		return ctrl.Result{}, nil
 	}
 
@@ -89,15 +96,19 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if ok := controllerutil.AddFinalizer(&kv, keyValueFinalizer); !ok {
 			return ctrl.Result{}, nil
 		}
+
 		if err := r.Update(ctx, &kv); err != nil {
 			return requeueOnConflict(err)
 		}
+
 		return ctrl.Result{Requeue: true}, nil
 	}
 
 	if err := validateAccountSelectors(kv.Spec.AccountSelector); err != nil {
 		kv.Status.Message = err.Error()
-		_ = r.Status().Update(ctx, &kv)
+		if err := r.Status().Update(ctx, &kv); err != nil {
+			l.Error(err, "failed to update keyvalue status")
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -105,16 +116,21 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err != nil {
 		if errors.Is(err, errWaitingForAccount) {
 			kv.Status.Message = err.Error()
-			_ = r.Status().Update(ctx, &kv)
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			if err := r.Status().Update(ctx, &kv); err != nil {
+				l.Error(err, "failed to update keyvalue status")
+			}
+			return requeueWaitingForResource, nil
 		}
+
 		l.Error(err, "failed to resolve account for kv bucket")
 		kv.Status.Message = err.Error()
-		_ = r.Status().Update(ctx, &kv)
-		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+		if err := r.Status().Update(ctx, &kv); err != nil {
+			l.Error(err, "failed to update keyvalue status")
+		}
+		return requeueReconcileErr, nil
 	}
 
-	out, err := r.ControlPlane.EnsureKeyValue(ctx, controlplane.KeyValueInput{
+	in := controlplane.KeyValueInput{
 		AccountSelectors: controlplane.AccountSelectors{
 			AccountID:         accountID,
 			AccountPublicNKey: kv.Spec.AccountPublicNKey,
@@ -134,22 +150,53 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		RePublish:    toSCPRePublish(kv.Spec.RePublish),
 		Mirror:       toSCPStreamSourcePtr(kv.Spec.Mirror),
 		Sources:      toSCPStreamSources(kv.Spec.Sources),
-	})
+	}
+
+	appliedState := loadAnnotation(&kv, keyValueAppliedStateAnnotation)
+	desiredState, err := json.Marshal(in)
 	if err != nil {
-		l.Error(err, "control plane apply failed")
 		kv.Status.Message = err.Error()
-		_ = r.Status().Update(ctx, &kv)
-		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+		if err := r.Status().Update(ctx, &kv); err != nil {
+			l.Error(err, "failed to update keyvalue status")
+		}
+		return requeueReconcileErr, nil
+	}
+
+	if diff, err := diffState(appliedState, desiredState); err != nil {
+		l.Error(err, "failed to diff keyvalue state")
+		kv.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &kv); err != nil {
+			l.Error(err, "failed to update keyvalue status")
+		}
+		return requeueReconcileErr, nil
+	} else if diff != "" {
+		l.Info("keyvalue desired state changed", "diff", diff)
+	}
+
+	out, err := r.ControlPlane.EnsureKeyValue(ctx, in)
+	if err != nil {
+		l.Error(err, "keyvalue update failed")
+		kv.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &kv); err != nil {
+			l.Error(err, "failed to update keyvalue status")
+		}
+		return requeueReconcileErr, nil
 	}
 
 	desiredStatus := kv.Status
-	desiredStatus.ObservedGeneration = kv.Generation
 	desiredStatus.KeyValueID = out.KeyValueID
 	desiredStatus.Message = "applied"
+
 	if desiredStatus != kv.Status {
-		desiredStatus.LastSyncedAt = time.Now().UTC().Format(time.RFC3339)
+		desiredStatus.LastSynced = time.Now().UTC().Format(time.RFC3339)
 		kv.Status = desiredStatus
 		if err := r.Status().Update(ctx, &kv); err != nil {
+			return requeueOnConflict(err)
+		}
+	}
+
+	if setAnnotations(&kv, keyValueAppliedStateAnnotation, desiredState) {
+		if err := r.Update(ctx, &kv); err != nil {
 			return requeueOnConflict(err)
 		}
 	}
@@ -159,18 +206,18 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 func (r *KeyValueReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&natsv1alpha1.KeyValue{}).
-		Watches(&natsv1alpha1.Account{}, handler.EnqueueRequestsFromMapFunc(r.enqueueKVBucketsForAccount)).
+		For(&natsv1.KeyValue{}).
+		Watches(&natsv1.Account{}, handler.EnqueueRequestsFromMapFunc(r.enqueueKVBucketsForAccount)).
 		Complete(r)
 }
 
 func (r *KeyValueReconciler) enqueueKVBucketsForAccount(ctx context.Context, obj client.Object) []reconcile.Request {
-	account, ok := obj.(*natsv1alpha1.Account)
+	account, ok := obj.(*natsv1.Account)
 	if !ok {
 		return nil
 	}
 
-	var buckets natsv1alpha1.KeyValueList
+	var buckets natsv1.KeyValueList
 	if err := r.List(ctx, &buckets, client.InNamespace(account.Namespace)); err != nil {
 		return nil
 	}

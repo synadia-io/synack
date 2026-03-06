@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -16,8 +17,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	natsv1alpha1 "github.com/synadia-io/synack/api/v1alpha1"
+	natsv1 "github.com/synadia-io/synack/api/v1alpha1"
 	"github.com/synadia-io/synack/internal/controlplane"
+)
+
+var (
+	requeueWaitingForResource = ctrl.Result{RequeueAfter: 5 * time.Second}
+	requeueReconcileErr       = ctrl.Result{RequeueAfter: 15 * time.Second}
+
+	errWaitingForStream = fmt.Errorf("waiting for referenced Stream to be ready")
 )
 
 // ConsumerReconciler reconciles a Consumer object.
@@ -37,7 +45,7 @@ const consumerFinalizer = "synack.synadia.io/consumer-finalizer"
 func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
 
-	var consumer natsv1alpha1.Consumer
+	var consumer natsv1.Consumer
 	if err := r.Get(ctx, req.NamespacedName, &consumer); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -52,6 +60,8 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	if !consumer.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&consumer, consumerFinalizer) {
+
+			// If we never had a consumer ID, this resource was never fully reconciled
 			if consumer.Status.ConsumerID == "" {
 				if ok := controllerutil.RemoveFinalizer(&consumer, consumerFinalizer); !ok {
 					return ctrl.Result{}, nil
@@ -62,25 +72,32 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				return ctrl.Result{}, nil
 			}
 
-			if err := r.ControlPlane.DeleteConsumer(ctx, controlplane.ConsumerInput{
+			in := controlplane.ConsumerInput{
 				StreamID:   consumer.Status.StreamID,
 				ConsumerID: knownConsumerID,
-				IsPush:     consumer.Status.IsPush,
-				Name:       consumer.Spec.Name,
-			}); err != nil {
-				l.Error(err, "control plane delete failed")
+				Spec: natsv1.ConsumerSpec{
+					Name: consumer.Spec.Name,
+				},
+			}
+
+			if err := r.ControlPlane.DeleteConsumer(ctx, in); err != nil {
+				l.Error(err, "consumer delete failed")
 				consumer.Status.Message = err.Error()
-				_ = r.Status().Update(ctx, &consumer)
-				return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+				if err := r.Status().Update(ctx, &consumer); err != nil {
+					l.Error(err, "failed to update consumer status")
+				}
+				return requeueReconcileErr, nil
 			}
 
 			if ok := controllerutil.RemoveFinalizer(&consumer, consumerFinalizer); !ok {
 				return ctrl.Result{}, nil
 			}
+
 			if err := r.Update(ctx, &consumer); err != nil {
 				return requeueOnConflict(err)
 			}
 		}
+
 		return ctrl.Result{}, nil
 	}
 
@@ -88,83 +105,92 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if ok := controllerutil.AddFinalizer(&consumer, consumerFinalizer); !ok {
 			return ctrl.Result{}, nil
 		}
+
 		if err := r.Update(ctx, &consumer); err != nil {
 			return requeueOnConflict(err)
 		}
+
 		return ctrl.Result{Requeue: true}, nil
 	}
 
 	if err := validateStreamSelectors(consumer.Spec); err != nil {
 		consumer.Status.Message = err.Error()
-		_ = r.Status().Update(ctx, &consumer)
+		if err := r.Status().Update(ctx, &consumer); err != nil {
+			l.Error(err, "failed to update consumer status")
+		}
 		return ctrl.Result{}, nil
 	}
 
-	streamID, waitingForStream, err := r.resolveStreamID(ctx, &consumer)
+	streamID, err := r.resolveStreamID(ctx, &consumer)
 	if err != nil {
-		if waitingForStream {
+		if errors.Is(err, errWaitingForStream) {
 			consumer.Status.Message = err.Error()
-			_ = r.Status().Update(ctx, &consumer)
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			if err := r.Status().Update(ctx, &consumer); err != nil {
+				l.Error(err, "failed to update consumer status")
+			}
+			return requeueWaitingForResource, nil
 		}
+
 		l.Error(err, "failed to resolve stream for consumer")
 		consumer.Status.Message = err.Error()
-		_ = r.Status().Update(ctx, &consumer)
-		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+		if err := r.Status().Update(ctx, &consumer); err != nil {
+			l.Error(err, "failed to update consumer status")
+		}
+		return requeueReconcileErr, nil
 	}
 
-	out, err := r.ControlPlane.EnsureConsumer(ctx, controlplane.ConsumerInput{
-		StreamID:          streamID,
-		ConsumerID:        knownConsumerID,
-		Name:              consumer.Spec.Name,
-		Description:       consumer.Spec.Description,
-		AckPolicy:         consumer.Spec.AckPolicy,
-		AckWait:           consumer.Spec.AckWait,
-		DeliverPolicy:     consumer.Spec.DeliverPolicy,
-		DurableName:       consumer.Spec.DurableName,
-		FilterSubjects:    consumer.Spec.FilterSubjects,
-		InactiveThreshold: consumer.Spec.InactiveThreshold,
-		MaxAckPending:     consumer.Spec.MaxAckPending,
-		MaxDeliver:        consumer.Spec.MaxDeliver,
-		MemStorage:        consumer.Spec.MemStorage,
-		Replicas:          consumer.Spec.Replicas,
-		OptStartSeq:       consumer.Spec.OptStartSeq,
-		OptStartTime:      consumer.Spec.OptStartTime,
-		ReplayPolicy:      consumer.Spec.ReplayPolicy,
-		SampleFreq:        consumer.Spec.SampleFreq,
-		Backoff:           consumer.Spec.Backoff,
-		Direct:            consumer.Spec.Direct,
-		Metadata:          consumer.Spec.Metadata,
+	in := controlplane.ConsumerInput{
+		StreamID:   streamID,
+		ConsumerID: knownConsumerID,
+		Spec:       consumer.Spec,
+	}
 
-		MaxRequestBatch:    consumer.Spec.MaxRequestBatch,
-		MaxRequestMaxBytes: consumer.Spec.MaxRequestMaxBytes,
-		MaxRequestExpires:  consumer.Spec.MaxRequestExpires,
-		MaxWaiting:         consumer.Spec.MaxWaiting,
-
-		DeliverSubject:    consumer.Spec.DeliverSubject,
-		DeliverGroup:      consumer.Spec.DeliverGroup,
-		FlowControl:       consumer.Spec.FlowControl,
-		HeadersOnly:       consumer.Spec.HeadersOnly,
-		HeartbeatInterval: consumer.Spec.HeartbeatInterval,
-		RateLimitBps:      consumer.Spec.RateLimitBps,
-	})
+	appliedState := loadAnnotation(&consumer, consumerAppliedStateAnnotation)
+	desiredState, err := json.Marshal(in)
 	if err != nil {
-		l.Error(err, "control plane apply failed")
 		consumer.Status.Message = err.Error()
-		_ = r.Status().Update(ctx, &consumer)
-		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+		if err := r.Status().Update(ctx, &consumer); err != nil {
+			l.Error(err, "failed to update consumer status")
+		}
+		return requeueReconcileErr, nil
+	}
+
+	if diff, err := diffState(appliedState, desiredState); err != nil {
+		l.Error(err, "failed to diff consumer state")
+		consumer.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &consumer); err != nil {
+			l.Error(err, "failed to update consumer status")
+		}
+		return requeueReconcileErr, nil
+	} else if diff != "" {
+		l.Info("consumer desired state changed", "diff", diff)
+	}
+
+	out, err := r.ControlPlane.EnsureConsumer(ctx, in)
+	if err != nil {
+		l.Error(err, "consumer update failed")
+		consumer.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &consumer); err != nil {
+			l.Error(err, "failed to update consumer status")
+		}
+		return requeueReconcileErr, nil
 	}
 
 	desiredStatus := consumer.Status
-	desiredStatus.ObservedGeneration = consumer.Generation
 	desiredStatus.ConsumerID = out.ConsumerID
 	desiredStatus.StreamID = out.StreamID
-	desiredStatus.IsPush = out.IsPush
 	desiredStatus.Message = "applied"
+
 	if desiredStatus != consumer.Status {
-		desiredStatus.LastSyncedAt = time.Now().UTC().Format(time.RFC3339)
+		desiredStatus.LastSynced = time.Now().UTC().Format(time.RFC3339)
 		consumer.Status = desiredStatus
 		if err := r.Status().Update(ctx, &consumer); err != nil {
+			return requeueOnConflict(err)
+		}
+	}
+
+	if setAnnotations(&consumer, consumerAppliedStateAnnotation, desiredState) {
+		if err := r.Update(ctx, &consumer); err != nil {
 			return requeueOnConflict(err)
 		}
 	}
@@ -174,55 +200,59 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 func (r *ConsumerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&natsv1alpha1.Consumer{}).
-		Watches(&natsv1alpha1.Stream{}, handler.EnqueueRequestsFromMapFunc(r.enqueueConsumersForStream)).
+		For(&natsv1.Consumer{}).
+		Watches(&natsv1.Stream{}, handler.EnqueueRequestsFromMapFunc(r.enqueueConsumersForStream)).
 		Complete(r)
 }
 
-func validateStreamSelectors(spec natsv1alpha1.ConsumerSpec) error {
+func validateStreamSelectors(spec natsv1.ConsumerSpec) error {
 	if spec.StreamRef != nil && spec.StreamID != "" {
 		return errors.New("spec.streamRef and spec.streamId are mutually exclusive")
 	}
+
 	if spec.StreamRef == nil && spec.StreamID == "" {
 		return errors.New("one of spec.streamRef or spec.streamId is required")
 	}
+
 	if spec.StreamRef != nil && spec.StreamRef.Name == "" {
 		return errors.New("spec.streamRef.name is required when streamRef is set")
 	}
+
 	return nil
 }
 
-func (r *ConsumerReconciler) resolveStreamID(ctx context.Context, consumer *natsv1alpha1.Consumer) (string, bool, error) {
+func (r *ConsumerReconciler) resolveStreamID(ctx context.Context, consumer *natsv1.Consumer) (string, error) {
 	if consumer.Spec.StreamRef == nil {
-		return consumer.Spec.StreamID, false, nil
+		return consumer.Spec.StreamID, nil
 	}
 
-	var stream natsv1alpha1.Stream
+	var stream natsv1.Stream
 	key := types.NamespacedName{
 		Namespace: consumer.Namespace,
 		Name:      consumer.Spec.StreamRef.Name,
 	}
+
 	if err := r.Get(ctx, key, &stream); err != nil {
 		if apierrors.IsNotFound(err) {
-			return "", true, fmt.Errorf("waiting for referenced Stream %q to be created", consumer.Spec.StreamRef.Name)
+			return "", errors.Join(errWaitingForStream, fmt.Errorf("referenced Stream %q not found", consumer.Spec.StreamRef.Name))
 		}
-		return "", false, err
+		return "", err
 	}
 
 	if stream.Status.StreamID == "" {
-		return "", true, fmt.Errorf("waiting for referenced Stream %q to reconcile status.streamId", consumer.Spec.StreamRef.Name)
+		return "", errors.Join(errWaitingForStream, fmt.Errorf("referenced Stream %q is not ready", consumer.Spec.StreamRef.Name))
 	}
 
-	return stream.Status.StreamID, false, nil
+	return stream.Status.StreamID, nil
 }
 
 func (r *ConsumerReconciler) enqueueConsumersForStream(ctx context.Context, obj client.Object) []reconcile.Request {
-	stream, ok := obj.(*natsv1alpha1.Stream)
+	stream, ok := obj.(*natsv1.Stream)
 	if !ok {
 		return nil
 	}
 
-	var consumers natsv1alpha1.ConsumerList
+	var consumers natsv1.ConsumerList
 	if err := r.List(ctx, &consumers, client.InNamespace(stream.Namespace)); err != nil {
 		return nil
 	}

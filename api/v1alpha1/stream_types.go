@@ -127,7 +127,7 @@ type RePublish struct {
 type StreamStatus struct {
 	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
 	StreamID           string `json:"streamId,omitempty"`
-	LastSyncedAt       string `json:"lastSyncedAt,omitempty"`
+	LastSynced         string `json:"lastSynced,omitempty"`
 	Message            string `json:"message,omitempty"`
 }
 

@@ -43,7 +43,7 @@ type ObjectStoreSpec struct {
 type ObjectStoreStatus struct {
 	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
 	ObjectStoreID      string `json:"ObjectStoreId,omitempty"`
-	LastSyncedAt       string `json:"lastSyncedAt,omitempty"`
+	LastSynced         string `json:"lastSynced,omitempty"`
 	Message            string `json:"message,omitempty"`
 }
 

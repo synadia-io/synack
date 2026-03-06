@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	natsv1alpha1 "github.com/synadia-io/synack/api/v1alpha1"
+	natsv1 "github.com/synadia-io/synack/api/v1alpha1"
 	"github.com/synadia-io/synack/internal/controlplane"
 )
 
@@ -26,16 +27,16 @@ type ObjectStoreReconciler struct {
 	ControlPlane controlplane.Client
 }
 
-const ObjectStoreFinalizer = "synack.synadia.io/ObjectStore-finalizer"
+const objectStoreFinalizer = "synack.synadia.io/objectstore-finalizer"
 
-// +kubebuilder:rbac:groups=synack.synadia.io,resources=ObjectStores,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=synack.synadia.io,resources=ObjectStores/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=synack.synadia.io,resources=ObjectStores/finalizers,verbs=update
+// +kubebuilder:rbac:groups=synack.synadia.io,resources=objectstores,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=synack.synadia.io,resources=objectstores/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=synack.synadia.io,resources=objectstores/finalizers,verbs=update
 
 func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
 
-	var obj natsv1alpha1.ObjectStore
+	var obj natsv1.ObjectStore
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -49,9 +50,11 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	if !obj.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(&obj, ObjectStoreFinalizer) {
+		if controllerutil.ContainsFinalizer(&obj, objectStoreFinalizer) {
+
+			// If we never had an object store ID, this resource was never fully reconciled
 			if obj.Status.ObjectStoreID == "" {
-				if ok := controllerutil.RemoveFinalizer(&obj, ObjectStoreFinalizer); !ok {
+				if ok := controllerutil.RemoveFinalizer(&obj, objectStoreFinalizer); !ok {
 					return ctrl.Result{}, nil
 				}
 				if err := r.Update(ctx, &obj); err != nil {
@@ -69,35 +72,43 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				ObjectStoreID: knownID,
 				Bucket:        obj.Spec.Bucket,
 			}); err != nil {
-				l.Error(err, "control plane delete failed")
+				l.Error(err, "object store delete failed")
 				obj.Status.Message = err.Error()
-				_ = r.Status().Update(ctx, &obj)
-				return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+				if err := r.Status().Update(ctx, &obj); err != nil {
+					l.Error(err, "failed to update objectstore status")
+				}
+				return requeueReconcileErr, nil
 			}
 
-			if ok := controllerutil.RemoveFinalizer(&obj, ObjectStoreFinalizer); !ok {
+			if ok := controllerutil.RemoveFinalizer(&obj, objectStoreFinalizer); !ok {
 				return ctrl.Result{}, nil
 			}
+
 			if err := r.Update(ctx, &obj); err != nil {
 				return requeueOnConflict(err)
 			}
 		}
+
 		return ctrl.Result{}, nil
 	}
 
-	if !controllerutil.ContainsFinalizer(&obj, ObjectStoreFinalizer) {
-		if ok := controllerutil.AddFinalizer(&obj, ObjectStoreFinalizer); !ok {
+	if !controllerutil.ContainsFinalizer(&obj, objectStoreFinalizer) {
+		if ok := controllerutil.AddFinalizer(&obj, objectStoreFinalizer); !ok {
 			return ctrl.Result{}, nil
 		}
+
 		if err := r.Update(ctx, &obj); err != nil {
 			return requeueOnConflict(err)
 		}
+
 		return ctrl.Result{Requeue: true}, nil
 	}
 
 	if err := validateAccountSelectors(obj.Spec.AccountSelector); err != nil {
 		obj.Status.Message = err.Error()
-		_ = r.Status().Update(ctx, &obj)
+		if err := r.Status().Update(ctx, &obj); err != nil {
+			l.Error(err, "failed to update object store status")
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -105,16 +116,21 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		if errors.Is(err, errWaitingForAccount) {
 			obj.Status.Message = err.Error()
-			_ = r.Status().Update(ctx, &obj)
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			if err := r.Status().Update(ctx, &obj); err != nil {
+				l.Error(err, "failed to update object store status")
+			}
+			return requeueWaitingForResource, nil
 		}
+
 		l.Error(err, "failed to resolve account for object bucket")
 		obj.Status.Message = err.Error()
-		_ = r.Status().Update(ctx, &obj)
-		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+		if err := r.Status().Update(ctx, &obj); err != nil {
+			l.Error(err, "failed to update object store status")
+		}
+		return requeueReconcileErr, nil
 	}
 
-	out, err := r.ControlPlane.EnsureObjectStore(ctx, controlplane.ObjectStoreInput{
+	in := controlplane.ObjectStoreInput{
 		AccountSelectors: controlplane.AccountSelectors{
 			AccountID:         accountID,
 			AccountPublicNKey: obj.Spec.AccountPublicNKey,
@@ -130,22 +146,53 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		Compression:   obj.Spec.Compression,
 		Placement:     toSCPPlacement(obj.Spec.Placement),
 		Metadata:      obj.Spec.Metadata,
-	})
+	}
+
+	appliedState := loadAnnotation(&obj, objectStoreAppliedStateAnnotation)
+	desiredState, err := json.Marshal(in)
 	if err != nil {
-		l.Error(err, "control plane apply failed")
 		obj.Status.Message = err.Error()
-		_ = r.Status().Update(ctx, &obj)
-		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+		if err := r.Status().Update(ctx, &obj); err != nil {
+			l.Error(err, "failed to update object store status")
+		}
+		return requeueReconcileErr, nil
+	}
+
+	if diff, err := diffState(appliedState, desiredState); err != nil {
+		l.Error(err, "failed to diff object store state")
+		obj.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &obj); err != nil {
+			l.Error(err, "failed to update object store status")
+		}
+		return requeueReconcileErr, nil
+	} else if diff != "" {
+		l.Info("object store desired state changed", "diff", diff)
+	}
+
+	out, err := r.ControlPlane.EnsureObjectStore(ctx, in)
+	if err != nil {
+		l.Error(err, "object store update failed")
+		obj.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &obj); err != nil {
+			l.Error(err, "failed to update object store status")
+		}
+		return requeueReconcileErr, nil
 	}
 
 	desiredStatus := obj.Status
-	desiredStatus.ObservedGeneration = obj.Generation
 	desiredStatus.ObjectStoreID = out.ObjectStoreID
 	desiredStatus.Message = "applied"
+
 	if desiredStatus != obj.Status {
-		desiredStatus.LastSyncedAt = time.Now().UTC().Format(time.RFC3339)
+		desiredStatus.LastSynced = time.Now().UTC().Format(time.RFC3339)
 		obj.Status = desiredStatus
 		if err := r.Status().Update(ctx, &obj); err != nil {
+			return requeueOnConflict(err)
+		}
+	}
+
+	if setAnnotations(&obj, objectStoreAppliedStateAnnotation, desiredState) {
+		if err := r.Update(ctx, &obj); err != nil {
 			return requeueOnConflict(err)
 		}
 	}
@@ -155,18 +202,18 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 func (r *ObjectStoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&natsv1alpha1.ObjectStore{}).
-		Watches(&natsv1alpha1.Account{}, handler.EnqueueRequestsFromMapFunc(r.enqueueObjectStoresForAccount)).
+		For(&natsv1.ObjectStore{}).
+		Watches(&natsv1.Account{}, handler.EnqueueRequestsFromMapFunc(r.enqueueObjectStoresForAccount)).
 		Complete(r)
 }
 
 func (r *ObjectStoreReconciler) enqueueObjectStoresForAccount(ctx context.Context, obj client.Object) []reconcile.Request {
-	account, ok := obj.(*natsv1alpha1.Account)
+	account, ok := obj.(*natsv1.Account)
 	if !ok {
 		return nil
 	}
 
-	var buckets natsv1alpha1.ObjectStoreList
+	var buckets natsv1.ObjectStoreList
 	if err := r.List(ctx, &buckets, client.InNamespace(account.Namespace)); err != nil {
 		return nil
 	}

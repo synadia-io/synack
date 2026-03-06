@@ -17,7 +17,7 @@ type AccountSpec struct {
 type AccountStatus struct {
 	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
 	AccountID          string `json:"accountId,omitempty"`
-	LastSyncedAt       string `json:"lastSyncedAt,omitempty"`
+	LastSynced         string `json:"lastSynced,omitempty"`
 	Message            string `json:"message,omitempty"`
 }
 

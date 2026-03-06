@@ -119,8 +119,7 @@ type ConsumerStatus struct {
 	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
 	ConsumerID         string `json:"consumerId,omitempty"`
 	StreamID           string `json:"streamId,omitempty"`
-	IsPush             bool   `json:"isPush,omitempty"`
-	LastSyncedAt       string `json:"lastSyncedAt,omitempty"`
+	LastSynced         string `json:"lastSynced,omitempty"`
 	Message            string `json:"message,omitempty"`
 }
 

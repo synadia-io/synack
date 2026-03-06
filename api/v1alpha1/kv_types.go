@@ -55,7 +55,7 @@ type KeyValueSpec struct {
 type KeyValueStatus struct {
 	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
 	KeyValueID         string `json:"keyValueId,omitempty"`
-	LastSyncedAt       string `json:"lastSyncedAt,omitempty"`
+	LastSynced         string `json:"lastSynced,omitempty"`
 	Message            string `json:"message,omitempty"`
 }
 

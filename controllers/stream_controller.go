@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	natsv1alpha1 "github.com/synadia-io/synack/api/v1alpha1"
+	natsv1 "github.com/synadia-io/synack/api/v1alpha1"
 	"github.com/synadia-io/synack/internal/controlplane"
 )
 
@@ -37,7 +38,7 @@ const streamFinalizer = "synack.synadia.io/stream-finalizer"
 func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
 
-	var stream natsv1alpha1.Stream
+	var stream natsv1.Stream
 	if err := r.Get(ctx, req.NamespacedName, &stream); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -52,6 +53,8 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	if !stream.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&stream, streamFinalizer) {
+
+			// If we never had a stream ID, this resource was never fully reconciled
 			if stream.Status.StreamID == "" {
 				if ok := controllerutil.RemoveFinalizer(&stream, streamFinalizer); !ok {
 					return ctrl.Result{}, nil
@@ -71,19 +74,23 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				StreamID: knownStreamID,
 				Name:     stream.Spec.Name,
 			}); err != nil {
-				l.Error(err, "control plane delete failed")
+				l.Error(err, "stream delete failed")
 				stream.Status.Message = err.Error()
-				_ = r.Status().Update(ctx, &stream)
-				return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+				if err := r.Status().Update(ctx, &stream); err != nil {
+					l.Error(err, "failed to update stream status")
+				}
+				return requeueReconcileErr, nil
 			}
 
 			if ok := controllerutil.RemoveFinalizer(&stream, streamFinalizer); !ok {
 				return ctrl.Result{}, nil
 			}
+
 			if err := r.Update(ctx, &stream); err != nil {
 				return requeueOnConflict(err)
 			}
 		}
+
 		return ctrl.Result{}, nil
 	}
 
@@ -91,15 +98,19 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if ok := controllerutil.AddFinalizer(&stream, streamFinalizer); !ok {
 			return ctrl.Result{}, nil
 		}
+
 		if err := r.Update(ctx, &stream); err != nil {
 			return requeueOnConflict(err)
 		}
+
 		return ctrl.Result{Requeue: true}, nil
 	}
 
 	if err := validateAccountSelectors(stream.Spec.AccountSelector); err != nil {
 		stream.Status.Message = err.Error()
-		_ = r.Status().Update(ctx, &stream)
+		if err := r.Status().Update(ctx, &stream); err != nil {
+			l.Error(err, "failed to update stream status")
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -107,16 +118,21 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if err != nil {
 		if errors.Is(err, errWaitingForAccount) {
 			stream.Status.Message = err.Error()
-			_ = r.Status().Update(ctx, &stream)
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			if err := r.Status().Update(ctx, &stream); err != nil {
+				l.Error(err, "failed to update stream status")
+			}
+			return requeueWaitingForResource, nil
 		}
+
 		l.Error(err, "failed to resolve account for stream")
 		stream.Status.Message = err.Error()
-		_ = r.Status().Update(ctx, &stream)
-		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+		if err := r.Status().Update(ctx, &stream); err != nil {
+			l.Error(err, "failed to update stream status")
+		}
+		return requeueReconcileErr, nil
 	}
 
-	out, err := r.ControlPlane.EnsureStream(ctx, controlplane.StreamInput{
+	in := controlplane.StreamInput{
 		AccountSelectors: controlplane.AccountSelectors{
 			AccountID:         accountID,
 			AccountPublicNKey: stream.Spec.AccountPublicNKey,
@@ -151,22 +167,53 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		DiscardPerSubject: stream.Spec.DiscardPerSubject,
 		FirstSequence:     stream.Spec.FirstSequence,
 		Metadata:          stream.Spec.Metadata,
-	})
+	}
+
+	appliedState := loadAnnotation(&stream, streamAppliedStateAnnotation)
+	desiredState, err := json.Marshal(in)
 	if err != nil {
-		l.Error(err, "control plane apply failed")
 		stream.Status.Message = err.Error()
-		_ = r.Status().Update(ctx, &stream)
-		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+		if err := r.Status().Update(ctx, &stream); err != nil {
+			l.Error(err, "failed to update stream status")
+		}
+		return requeueReconcileErr, nil
+	}
+
+	if diff, err := diffState(appliedState, desiredState); err != nil {
+		l.Error(err, "failed to diff stream state")
+		stream.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &stream); err != nil {
+			l.Error(err, "failed to update stream status")
+		}
+		return requeueReconcileErr, nil
+	} else if diff != "" {
+		l.Info("stream desired state changed", "diff", diff)
+	}
+
+	out, err := r.ControlPlane.EnsureStream(ctx, in)
+	if err != nil {
+		l.Error(err, "stream update failed")
+		stream.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &stream); err != nil {
+			l.Error(err, "failed to update stream status")
+		}
+		return requeueReconcileErr, nil
 	}
 
 	desiredStatus := stream.Status
-	desiredStatus.ObservedGeneration = stream.Generation
 	desiredStatus.StreamID = out.StreamID
 	desiredStatus.Message = "applied"
+
 	if desiredStatus != stream.Status {
-		desiredStatus.LastSyncedAt = time.Now().UTC().Format(time.RFC3339)
+		desiredStatus.LastSynced = time.Now().UTC().Format(time.RFC3339)
 		stream.Status = desiredStatus
 		if err := r.Status().Update(ctx, &stream); err != nil {
+			return requeueOnConflict(err)
+		}
+	}
+
+	if setAnnotations(&stream, streamAppliedStateAnnotation, desiredState) {
+		if err := r.Update(ctx, &stream); err != nil {
 			return requeueOnConflict(err)
 		}
 	}
@@ -176,18 +223,18 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 func (r *StreamReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&natsv1alpha1.Stream{}).
-		Watches(&natsv1alpha1.Account{}, handler.EnqueueRequestsFromMapFunc(r.enqueueStreamsForAccount)).
+		For(&natsv1.Stream{}).
+		Watches(&natsv1.Account{}, handler.EnqueueRequestsFromMapFunc(r.enqueueStreamsForAccount)).
 		Complete(r)
 }
 
 func (r *StreamReconciler) enqueueStreamsForAccount(ctx context.Context, obj client.Object) []reconcile.Request {
-	account, ok := obj.(*natsv1alpha1.Account)
+	account, ok := obj.(*natsv1.Account)
 	if !ok {
 		return nil
 	}
 
-	var streams natsv1alpha1.StreamList
+	var streams natsv1.StreamList
 	if err := r.List(ctx, &streams, client.InNamespace(account.Namespace)); err != nil {
 		return nil
 	}
@@ -210,7 +257,7 @@ func (r *StreamReconciler) enqueueStreamsForAccount(ctx context.Context, obj cli
 	return requests
 }
 
-func toSCPPlacement(in *natsv1alpha1.Placement) *syncp.Placement {
+func toSCPPlacement(in *natsv1.Placement) *syncp.Placement {
 	if in == nil {
 		return nil
 	}
@@ -221,7 +268,7 @@ func toSCPPlacement(in *natsv1alpha1.Placement) *syncp.Placement {
 	}
 }
 
-func toSCPSubjectTransform(in *natsv1alpha1.SubjectTransform) *syncp.SubjectTransformConfig {
+func toSCPSubjectTransform(in *natsv1.SubjectTransform) *syncp.SubjectTransformConfig {
 	if in == nil {
 		return nil
 	}
@@ -232,7 +279,7 @@ func toSCPSubjectTransform(in *natsv1alpha1.SubjectTransform) *syncp.SubjectTran
 	}
 }
 
-func toSCPRePublish(in *natsv1alpha1.RePublish) *syncp.RePublish {
+func toSCPRePublish(in *natsv1.RePublish) *syncp.RePublish {
 	if in == nil {
 		return nil
 	}
@@ -247,12 +294,12 @@ func toSCPRePublish(in *natsv1alpha1.RePublish) *syncp.RePublish {
 	}
 }
 
-func toSCPStreamSourcePtr(in *natsv1alpha1.StreamSource) *syncp.StreamSource {
+func toSCPStreamSourcePtr(in *natsv1.StreamSource) *syncp.StreamSource {
 	if in == nil {
 		return nil
 	}
 
-	sources := toSCPStreamSources([]natsv1alpha1.StreamSource{*in})
+	sources := toSCPStreamSources([]natsv1.StreamSource{*in})
 	if len(sources) == 0 {
 		return nil
 	}
@@ -260,7 +307,7 @@ func toSCPStreamSourcePtr(in *natsv1alpha1.StreamSource) *syncp.StreamSource {
 	return &sources[0]
 }
 
-func toSCPStreamSources(in []natsv1alpha1.StreamSource) []syncp.StreamSource {
+func toSCPStreamSources(in []natsv1.StreamSource) []syncp.StreamSource {
 	if len(in) == 0 {
 		return nil
 	}

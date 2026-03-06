@@ -9,13 +9,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	natsv1alpha1 "github.com/synadia-io/synack/api/v1alpha1"
+	natsv1 "github.com/synadia-io/synack/api/v1alpha1"
 )
 
 var errWaitingForAccount = fmt.Errorf("waiting for referenced Account to be ready")
 
 // validateAccountSelectors ensures that accountRef is not combined with direct selectors.
-func validateAccountSelectors(sel natsv1alpha1.AccountSelector) error {
+func validateAccountSelectors(sel natsv1.AccountSelector) error {
 	if sel.AccountRef == nil {
 		return nil
 	}
@@ -32,12 +32,12 @@ func validateAccountSelectors(sel natsv1alpha1.AccountSelector) error {
 }
 
 // resolveAccountRef resolves the account ID from an AccountSelector.
-func resolveAccountRef(ctx context.Context, c client.Client, namespace string, sel natsv1alpha1.AccountSelector) (string, error) {
+func resolveAccountRef(ctx context.Context, c client.Client, namespace string, sel natsv1.AccountSelector) (string, error) {
 	if sel.AccountRef == nil {
 		return sel.AccountID, nil
 	}
 
-	var account natsv1alpha1.Account
+	var account natsv1.Account
 	key := types.NamespacedName{
 		Namespace: namespace,
 		Name:      sel.AccountRef.Name,
