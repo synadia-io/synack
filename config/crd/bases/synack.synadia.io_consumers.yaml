@@ -1,0 +1,208 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.0
+  name: consumers.synack.synadia.io
+spec:
+  group: synack.synadia.io
+  names:
+    kind: Consumer
+    listKind: ConsumerList
+    plural: consumers
+    shortNames:
+    - nsconsumer
+    singular: consumer
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.streamId
+      name: StreamID
+      type: string
+    - jsonPath: .spec.name
+      name: Name
+      type: string
+    - jsonPath: .status.consumerId
+      name: ConsumerID
+      type: string
+    - jsonPath: .status.isPush
+      name: Push
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Consumer is the Schema for consumer resources.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ConsumerSpec captures desired Consumer behavior in Control
+              Plane terms.
+            properties:
+              ackPolicy:
+                description: 'AckPolicy controls acknowledgement policy: explicit,
+                  all, or none.'
+                type: string
+              ackWait:
+                description: AckWait is a Go duration string for acknowledgement wait
+                  time.
+                type: string
+              backoff:
+                description: Backoff is a list of Go duration strings for redelivery
+                  backoff.
+                items:
+                  type: string
+                type: array
+              consumerId:
+                description: ConsumerID optionally pins this resource to an existing
+                  Control Plane consumer ID.
+                type: string
+              deliverGroup:
+                description: DeliverGroup sets the push queue group.
+                type: string
+              deliverPolicy:
+                description: 'DeliverPolicy controls delivery policy: all, last, last_per_subject,
+                  new, by_start_sequence, by_start_time.'
+                type: string
+              deliverSubject:
+                description: DeliverSubject sets the push deliver subject. When set,
+                  enables push mode.
+                type: string
+              description:
+                description: Description is a human readable consumer description.
+                type: string
+              direct:
+                description: Direct enables direct get for consumers.
+                type: boolean
+              durableName:
+                description: DurableName sets the consumer's durable name.
+                type: string
+              filterSubjects:
+                description: FilterSubjects filters delivered messages by subjects.
+                items:
+                  type: string
+                type: array
+              flowControl:
+                description: FlowControl enables push flow control.
+                type: boolean
+              headersOnly:
+                description: HeadersOnly delivers only message headers in push mode.
+                type: boolean
+              heartbeatInterval:
+                description: HeartbeatInterval is a Go duration string for push idle
+                  heartbeats.
+                type: string
+              inactiveThreshold:
+                description: InactiveThreshold is a Go duration string for consumer
+                  inactivity threshold.
+                type: string
+              maxAckPending:
+                description: MaxAckPending limits outstanding un-acked messages.
+                type: integer
+              maxDeliver:
+                description: MaxDeliver limits redelivery attempts.
+                type: integer
+              maxRequestBatch:
+                description: MaxRequestBatch limits pull request batch size.
+                type: integer
+              maxRequestExpires:
+                description: MaxRequestExpires is a Go duration string for pull request
+                  expiry.
+                type: string
+              maxRequestMaxBytes:
+                description: MaxRequestMaxBytes limits pull request batch byte size.
+                type: integer
+              maxWaiting:
+                description: MaxWaiting limits concurrent pull requests.
+                type: integer
+              memStorage:
+                description: MemStorage enables in-memory storage.
+                type: boolean
+              metadata:
+                additionalProperties:
+                  type: string
+                description: Metadata stores arbitrary consumer metadata.
+                type: object
+              name:
+                description: Name is the consumer name.
+                type: string
+              optStartSeq:
+                description: OptStartSeq sets the start sequence for by_start_sequence
+                  delivery.
+                format: int64
+                type: integer
+              optStartTime:
+                description: OptStartTime is an RFC3339 timestamp for by_start_time
+                  delivery.
+                type: string
+              rateLimitBps:
+                description: RateLimitBps limits push delivery rate in bits per second.
+                format: int64
+                type: integer
+              replayPolicy:
+                description: 'ReplayPolicy controls replay speed: instant or original.'
+                type: string
+              replicas:
+                description: Replicas controls consumer replica count.
+                type: integer
+              sampleFreq:
+                description: SampleFreq sets the sampling frequency.
+                type: string
+              streamId:
+                description: StreamID is the direct Control Plane stream ID. Mutually
+                  exclusive with StreamRef.
+                type: string
+              streamRef:
+                description: |-
+                  StreamRef references a Stream CR in the same namespace.
+                  Mutually exclusive with StreamID.
+                properties:
+                  name:
+                    description: Name is the referenced Stream resource name in the
+                      same namespace.
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - name
+            type: object
+          status:
+            description: ConsumerStatus reflects observed state from reconciliation.
+            properties:
+              consumerId:
+                type: string
+              lastSynced:
+                type: string
+              message:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              streamId:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

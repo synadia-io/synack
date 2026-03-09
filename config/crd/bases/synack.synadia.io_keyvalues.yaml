@@ -1,0 +1,224 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.0
+  name: keyvalues.synack.synadia.io
+spec:
+  group: synack.synadia.io
+  names:
+    kind: KeyValue
+    listKind: KeyValueList
+    plural: keyvalues
+    shortNames:
+    - nskv
+    singular: keyvalue
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.bucket
+      name: Bucket
+      type: string
+    - jsonPath: .status.keyValueId
+      name: KeyValueID
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: KeyValue is the Schema for KeyValue resources.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: KeyValueSpec captures desired KeyValue behavior in Control
+              Plane terms.
+            properties:
+              accountId:
+                description: AccountID identifies the target Control Plane account
+                  ID.
+                type: string
+              accountPublicNKey:
+                description: |-
+                  AccountPublicNKey identifies the target account by public NKEY.
+                  When this is set, SystemID must also be set so lookup can be scoped.
+                type: string
+              accountRef:
+                description: |-
+                  AccountRef references an Account CR in the same namespace.
+                  When set, the resource waits for the Account status.accountId and uses that ID.
+                properties:
+                  name:
+                    description: Name is the referenced Account resource name in the
+                      same namespace.
+                    type: string
+                required:
+                - name
+                type: object
+              bucket:
+                description: Bucket is the KV bucket name.
+                type: string
+              compression:
+                description: Compression enables S2 compression when true.
+                type: boolean
+              description:
+                description: Description is a human readable description.
+                type: string
+              history:
+                description: History controls number of historical values per key.
+                type: integer
+              keyValueId:
+                description: KeyValueID optionally pins this resource to an existing
+                  Control Plane KV bucket ID.
+                type: string
+              maxBytes:
+                description: MaxBytes limits total bytes for the bucket.
+                type: integer
+              maxValueSize:
+                description: MaxValueSize limits value size in bytes.
+                type: integer
+              mirror:
+                description: Mirror configures a mirror source.
+                properties:
+                  externalApiPrefix:
+                    type: string
+                  externalDeliverPrefix:
+                    type: string
+                  filterSubject:
+                    type: string
+                  name:
+                    type: string
+                  optStartSeq:
+                    type: integer
+                  optStartTime:
+                    type: string
+                  subjectTransforms:
+                    items:
+                      description: SubjectTransform describes a source/destination
+                        subject transform.
+                      properties:
+                        dest:
+                          type: string
+                        source:
+                          type: string
+                      required:
+                      - dest
+                      - source
+                      type: object
+                    type: array
+                required:
+                - name
+                type: object
+              placement:
+                description: Placement controls cluster and tag placement requirements.
+                properties:
+                  cluster:
+                    type: string
+                  tags:
+                    items:
+                      type: string
+                    type: array
+                required:
+                - cluster
+                type: object
+              replicas:
+                description: Replicas controls replica count.
+                type: integer
+              republish:
+                description: RePublish configures republish behavior.
+                properties:
+                  destination:
+                    type: string
+                  headers_only:
+                    type: boolean
+                  source:
+                    type: string
+                required:
+                - destination
+                - source
+                type: object
+              sources:
+                description: Sources defines stream sources for the KV bucket.
+                items:
+                  description: StreamSource defines a source stream configuration.
+                  properties:
+                    externalApiPrefix:
+                      type: string
+                    externalDeliverPrefix:
+                      type: string
+                    filterSubject:
+                      type: string
+                    name:
+                      type: string
+                    optStartSeq:
+                      type: integer
+                    optStartTime:
+                      type: string
+                    subjectTransforms:
+                      items:
+                        description: SubjectTransform describes a source/destination
+                          subject transform.
+                        properties:
+                          dest:
+                            type: string
+                          source:
+                            type: string
+                        required:
+                        - dest
+                        - source
+                        type: object
+                      type: array
+                  required:
+                  - name
+                  type: object
+                type: array
+              storage:
+                description: 'Storage controls storage backend: file or memory.'
+                type: string
+              systemId:
+                description: SystemID scopes AccountPublicNKey resolution to a specific
+                  system.
+                type: string
+              ttl:
+                description: TTL is a Go duration string controlling max age, for
+                  example "24h".
+                type: string
+            required:
+            - bucket
+            type: object
+          status:
+            description: KeyValueStatus reflects observed state from reconciliation.
+            properties:
+              keyValueId:
+                type: string
+              lastSynced:
+                type: string
+              message:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
