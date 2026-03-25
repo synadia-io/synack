@@ -27,18 +27,22 @@ func init() {
 
 func main() {
 	var (
-		metricsAddr          string
-		probeAddr            string
-		enableLeaderElection bool
 		cpBaseURL            string
 		reconcileInterval    time.Duration
+		tokenEnv             string
+		timeout              time.Duration
+		enableLeaderElection bool
+		metricsAddr          string
+		probeAddr            string
 	)
 
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	flag.StringVar(&cpBaseURL, "control-plane-base-url", "https://cloud.synadia.com", "API base URL, for example https://cloud.synadia.com")
 	flag.DurationVar(&reconcileInterval, "reconcile-interval", time.Minute, "Interval between scheduled reconciliations for drift detection.")
+	flag.StringVar(&tokenEnv, "token-var", "SYNACK_TOKEN", "Environment variable name for Control Plane token.")
+	flag.DurationVar(&timeout, "timeout", 30*time.Second, "Timeout for Control Plane API requests.")
+	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
+	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 
 	opts := zap.Options{
 		Development: true,
@@ -60,7 +64,9 @@ func main() {
 	}
 
 	cpClient, err := controlplane.NewClient(controlplane.Options{
-		BaseURL: cpBaseURL,
+		BaseURL:  cpBaseURL,
+		Timeout:  timeout,
+		TokenEnv: tokenEnv,
 	})
 	if err != nil {
 		os.Exit(1)

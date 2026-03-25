@@ -12,6 +12,7 @@ type ObjectStoreSpec struct {
 	ObjectStoreID string `json:"ObjectStoreId,omitempty"`
 
 	// Bucket is the object store bucket name.
+	// +kubebuilder:validation:Required
 	Bucket string `json:"bucket"`
 
 	// Description is a human readable description.

@@ -7,9 +7,11 @@ import (
 // AccountSpec captures desired Account behavior in Control Plane terms.
 type AccountSpec struct {
 	// SystemID identifies the Control Plane system this account belongs to.
+	// +kubebuilder:validation:Required
 	SystemID string `json:"systemId"`
 
 	// Name is the human-readable account name.
+	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 }
 

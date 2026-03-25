@@ -12,6 +12,7 @@ type KeyValueSpec struct {
 	KeyValueID string `json:"keyValueId,omitempty"`
 
 	// Bucket is the KV bucket name.
+	// +kubebuilder:validation:Required
 	Bucket string `json:"bucket"`
 
 	// Description is a human readable description.

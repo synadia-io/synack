@@ -13,6 +13,7 @@ type StreamSpec struct {
 	StreamID string `json:"streamId,omitempty"`
 
 	// Name is the JetStream stream name.
+	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
 	// Description is a human readable stream description.

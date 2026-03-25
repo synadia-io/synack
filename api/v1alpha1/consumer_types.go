@@ -23,6 +23,7 @@ type ConsumerSpec struct {
 	ConsumerID string `json:"consumerId,omitempty"`
 
 	// Name is the consumer name.
+	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
 	// Description is a human readable consumer description.

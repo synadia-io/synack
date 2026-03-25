@@ -13,10 +13,12 @@ type NatsUserSpec struct {
 	NatsUserID string `json:"natsUserId,omitempty"`
 
 	// Name is the NATS user name.
+	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
 	// SigningKeyGroupID is the signing key group to use for this user.
-	SigningKeyGroupID string `json:"signingKeyGroupId"`
+	// +kubebuilder:default="Default"
+	SigningKeyGroupID string `json:"signingKeyGroupId,omitempty"`
 
 	// JwtExpiresInSecs sets the JWT expiration in seconds.
 	JwtExpiresInSecs *int64 `json:"jwtExpiresInSecs,omitempty"`

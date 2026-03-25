@@ -106,6 +106,7 @@ spec:
                 format: int64
                 type: integer
               signingKeyGroupId:
+                default: Default
                 description: SigningKeyGroupID is the signing key group to use for
                   this user.
                 type: string
@@ -124,7 +125,6 @@ spec:
                 type: array
             required:
             - name
-            - signingKeyGroupId
             type: object
           status:
             description: NatsUserStatus reflects observed state from reconciliation.
