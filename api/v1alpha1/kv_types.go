@@ -61,7 +61,7 @@ type KeyValueStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Namespaced,shortName=nskv
+// +kubebuilder:resource:scope=Namespaced,shortName=kv
 // +kubebuilder:printcolumn:name="Bucket",type="string",JSONPath=".spec.bucket"
 // +kubebuilder:printcolumn:name="KeyValueID",type="string",JSONPath=".status.keyValueId"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"

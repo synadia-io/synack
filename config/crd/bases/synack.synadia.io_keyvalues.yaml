@@ -12,7 +12,7 @@ spec:
     listKind: KeyValueList
     plural: keyvalues
     shortNames:
-    - nskv
+    - kv
     singular: keyvalue
   scope: Namespaced
   versions:

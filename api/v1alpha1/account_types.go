@@ -23,7 +23,7 @@ type AccountStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Namespaced,shortName=nsaccount
+// +kubebuilder:resource:scope=Namespaced,shortName=account
 // +kubebuilder:printcolumn:name="System",type="string",JSONPath=".spec.systemId"
 // +kubebuilder:printcolumn:name="Name",type="string",JSONPath=".spec.name"
 // +kubebuilder:printcolumn:name="AccountID",type="string",JSONPath=".status.accountId"

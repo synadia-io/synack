@@ -49,7 +49,7 @@ type ObjectStoreStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Namespaced,shortName=nsobject
+// +kubebuilder:resource:scope=Namespaced,shortName=objectstore
 // +kubebuilder:printcolumn:name="Bucket",type="string",JSONPath=".spec.bucket"
 // +kubebuilder:printcolumn:name="ObjectStoreID",type="string",JSONPath=".status.ObjectStoreId"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"

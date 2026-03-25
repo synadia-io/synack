@@ -23,12 +23,14 @@ const (
 	keyValueAppliedStateAnnotation    = "synack.synadia.io/last-applied-keyvalue-input"
 	objectStoreAppliedStateAnnotation = "synack.synadia.io/last-applied-objectstore-input"
 	consumerAppliedStateAnnotation    = "synack.synadia.io/last-applied-consumer-input"
+	natsUserAppliedStateAnnotation    = "synack.synadia.io/last-applied-natsuser-input"
 
 	accountServerStateAnnotation     = "synack.synadia.io/last-server-account-state"
 	streamServerStateAnnotation      = "synack.synadia.io/last-server-stream-state"
 	keyValueServerStateAnnotation    = "synack.synadia.io/last-server-keyvalue-state"
 	objectStoreServerStateAnnotation = "synack.synadia.io/last-server-objectstore-state"
 	consumerServerStateAnnotation    = "synack.synadia.io/last-server-consumer-state"
+	natsUserServerStateAnnotation    = "synack.synadia.io/last-server-natsuser-state"
 )
 
 func requeueOnConflict(err error) (ctrl.Result, error) {
@@ -128,6 +130,20 @@ func hasDependentConsumers(ctx context.Context, c client.Client, namespace, stre
 	return false, nil
 }
 
+// hasDependentNatsUsers returns true if any NatsUser in the same namespace references the given account by name.
+func hasDependentNatsUsers(ctx context.Context, c client.Client, namespace, accountName string) (bool, error) {
+	var users natsv1.NatsUserList
+	if err := c.List(ctx, &users, client.InNamespace(namespace)); err != nil {
+		return false, err
+	}
+	for _, u := range users.Items {
+		if u.Spec.AccountRef != nil && u.Spec.AccountRef.Name == accountName {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // checkAccountDependents returns an error describing any resources that still reference the account.
 func checkAccountDependents(ctx context.Context, c client.Client, namespace, accountName string) error {
 	hasStreams, err := hasDependentStreams(ctx, c, namespace, accountName)
@@ -142,8 +158,12 @@ func checkAccountDependents(ctx context.Context, c client.Client, namespace, acc
 	if err != nil {
 		return fmt.Errorf("failed to check dependent object stores: %w", err)
 	}
+	hasUsers, err := hasDependentNatsUsers(ctx, c, namespace, accountName)
+	if err != nil {
+		return fmt.Errorf("failed to check dependent nats users: %w", err)
+	}
 
-	if hasStreams || hasKVs || hasObjs {
+	if hasStreams || hasKVs || hasObjs || hasUsers {
 		return fmt.Errorf("waiting for dependent resources to be deleted before removing Account %q", accountName)
 	}
 	return nil

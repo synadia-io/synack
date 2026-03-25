@@ -106,6 +106,14 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		os.Exit(1)
 	}
+	if err := (&controllers.NatsUserReconciler{
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		ControlPlane:    cpClient,
+		RequeueInterval: reconcileInterval,
+	}).SetupWithManager(mgr); err != nil {
+		os.Exit(1)
+	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		os.Exit(1)

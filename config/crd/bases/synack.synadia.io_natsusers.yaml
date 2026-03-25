@@ -4,24 +4,27 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.0
-  name: objectstores.synack.synadia.io
+  name: natsusers.synack.synadia.io
 spec:
   group: synack.synadia.io
   names:
-    kind: ObjectStore
-    listKind: ObjectStoreList
-    plural: objectstores
+    kind: NatsUser
+    listKind: NatsUserList
+    plural: natsusers
     shortNames:
-    - objectstore
-    singular: objectstore
+    - user
+    singular: natsuser
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.bucket
-      name: Bucket
+    - jsonPath: .status.accountId
+      name: AccountID
       type: string
-    - jsonPath: .status.ObjectStoreId
-      name: ObjectStoreID
+    - jsonPath: .spec.name
+      name: Name
+      type: string
+    - jsonPath: .status.natsUserId
+      name: UserID
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -29,7 +32,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ObjectStore is the Schema for object store resources.
+        description: NatsUser is the Schema for NATS user resources.
         properties:
           apiVersion:
             description: |-
@@ -49,13 +52,9 @@ spec:
           metadata:
             type: object
           spec:
-            description: ObjectStoreSpec captures desired Object Store behavior in
-              Control Plane terms.
+            description: NatsUserSpec captures desired NATS User behavior in Control
+              Plane terms.
             properties:
-              ObjectStoreId:
-                description: ObjectStoreID optionally pins this resource to an existing
-                  Control Plane object store ID.
-                type: string
               accountId:
                 description: AccountID identifies the target Control Plane account
                   ID.
@@ -77,64 +76,72 @@ spec:
                 required:
                 - name
                 type: object
-              bucket:
-                description: Bucket is the object store bucket name.
-                type: string
-              compression:
-                description: Compression enables S2 compression when true.
-                type: boolean
-              description:
-                description: Description is a human readable description.
-                type: string
-              maxBytes:
-                description: MaxBytes limits total bytes for the bucket.
-                type: integer
-              metadata:
-                additionalProperties:
+              allowedConnectionTypes:
+                description: AllowedConnectionTypes restricts connection types for
+                  the user.
+                items:
                   type: string
-                description: Metadata stores arbitrary bucket metadata.
-                type: object
-              placement:
-                description: Placement controls cluster and tag placement requirements.
-                properties:
-                  cluster:
-                    type: string
-                  tags:
-                    items:
-                      type: string
-                    type: array
-                required:
-                - cluster
-                type: object
-              replicas:
-                description: Replicas controls replica count.
+                type: array
+              bearerToken:
+                description: BearerToken enables bearer token mode.
+                type: boolean
+              data:
+                description: Data sets the data limit (bytes, -1 unlimited).
+                format: int64
                 type: integer
-              storage:
-                description: 'Storage controls storage backend: file or memory.'
+              jwtExpiresInSecs:
+                description: JwtExpiresInSecs sets the JWT expiration in seconds.
+                format: int64
+                type: integer
+              name:
+                description: Name is the NATS user name.
                 type: string
+              natsUserId:
+                description: NatsUserID optionally pins this resource to an existing
+                  Control Plane user ID.
+                type: string
+              payload:
+                description: Payload sets the max message payload size (bytes, -1
+                  unlimited).
+                format: int64
+                type: integer
+              signingKeyGroupId:
+                description: SigningKeyGroupID is the signing key group to use for
+                  this user.
+                type: string
+              subs:
+                description: Subs sets the max subscriptions (-1 unlimited).
+                format: int64
+                type: integer
               systemId:
                 description: SystemID scopes AccountPublicNKey resolution to a specific
                   system.
                 type: string
-              ttl:
-                description: TTL is a Go duration string controlling max age, for
-                  example "24h".
-                type: string
+              tags:
+                description: Tags are user-defined tags.
+                items:
+                  type: string
+                type: array
             required:
-            - bucket
+            - name
+            - signingKeyGroupId
             type: object
           status:
-            description: ObjectStoreStatus reflects observed state from reconciliation.
+            description: NatsUserStatus reflects observed state from reconciliation.
             properties:
-              ObjectStoreId:
+              accountId:
                 type: string
               lastSynced:
                 type: string
               message:
                 type: string
+              natsUserId:
+                type: string
               observedGeneration:
                 format: int64
                 type: integer
+              userPublicKey:
+                type: string
             type: object
         type: object
     served: true

@@ -133,7 +133,7 @@ type StreamStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Namespaced,shortName=nsstream
+// +kubebuilder:resource:scope=Namespaced,shortName=stream
 // +kubebuilder:printcolumn:name="AccountID",type="string",JSONPath=".spec.accountId"
 // +kubebuilder:printcolumn:name="AccountNKey",type="string",JSONPath=".spec.accountPublicNKey"
 // +kubebuilder:printcolumn:name="Name",type="string",JSONPath=".spec.name"

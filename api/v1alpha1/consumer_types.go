@@ -125,7 +125,7 @@ type ConsumerStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Namespaced,shortName=nsconsumer
+// +kubebuilder:resource:scope=Namespaced,shortName=consumer
 // +kubebuilder:printcolumn:name="StreamID",type="string",JSONPath=".status.streamId"
 // +kubebuilder:printcolumn:name="Name",type="string",JSONPath=".spec.name"
 // +kubebuilder:printcolumn:name="ConsumerID",type="string",JSONPath=".status.consumerId"

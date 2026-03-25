@@ -12,7 +12,7 @@ spec:
     listKind: AccountList
     plural: accounts
     shortNames:
-    - nsaccount
+    - account
     singular: account
   scope: Namespaced
   versions:

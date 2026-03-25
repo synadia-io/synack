@@ -12,7 +12,7 @@ spec:
     listKind: StreamList
     plural: streams
     shortNames:
-    - nsstream
+    - stream
     singular: stream
   scope: Namespaced
   versions:

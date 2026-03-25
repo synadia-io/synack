@@ -12,7 +12,7 @@ spec:
     listKind: ConsumerList
     plural: consumers
     shortNames:
-    - nsconsumer
+    - consumer
     singular: consumer
   scope: Namespaced
   versions:
