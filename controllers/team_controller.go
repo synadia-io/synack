@@ -100,7 +100,7 @@ func (r *TeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		Name:   team.Spec.Name,
 	}
 
-	appliedState := loadAnnotation(&team, teamAppliedStateAnnotation)
+	appliedState := loadAnnotation(&team, appliedStateAnnotation)
 	desiredState, err := json.Marshal(in)
 	if err != nil {
 		team.Status.Message = err.Error()
@@ -130,7 +130,7 @@ func (r *TeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			return requeueReconcileErr, nil
 		}
 
-		lastServerState := loadAnnotation(&team, teamServerStateAnnotation)
+		lastServerState := loadAnnotation(&team, serverStateAnnotation)
 		if found && lastServerState != nil {
 			diff, err := diffState(serverState, lastServerState)
 			if err != nil {
@@ -172,9 +172,9 @@ func (r *TeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	readIn.TeamID = out.TeamID
 	newServerState, _, _ := r.ControlPlane.ReadTeamState(ctx, readIn)
 
-	annotationsChanged := setAnnotations(&team, teamAppliedStateAnnotation, desiredState)
+	annotationsChanged := setAnnotations(&team, appliedStateAnnotation, desiredState)
 	if newServerState != nil {
-		if setAnnotations(&team, teamServerStateAnnotation, newServerState) {
+		if setAnnotations(&team, serverStateAnnotation, newServerState) {
 			annotationsChanged = true
 		}
 	}

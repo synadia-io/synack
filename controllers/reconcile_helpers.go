@@ -18,25 +18,8 @@ import (
 const (
 	conflictRetryDelay = 2 * time.Second
 
-	accountAppliedStateAnnotation     = "synack.synadia.io/last-applied-account-input"
-	streamAppliedStateAnnotation      = "synack.synadia.io/last-applied-stream-input"
-	keyValueAppliedStateAnnotation    = "synack.synadia.io/last-applied-keyvalue-input"
-	objectStoreAppliedStateAnnotation = "synack.synadia.io/last-applied-objectstore-input"
-	consumerAppliedStateAnnotation    = "synack.synadia.io/last-applied-consumer-input"
-	natsUserAppliedStateAnnotation              = "synack.synadia.io/last-applied-natsuser-input"
-	teamAppliedStateAnnotation                  = "synack.synadia.io/last-applied-team-input"
-	teamServiceAccountAppliedStateAnnotation       = "synack.synadia.io/last-applied-teamserviceaccount-input"
-	appUserRoleBindingAppliedStateAnnotation = "synack.synadia.io/last-applied-appuserrolebinding-input"
-
-	accountServerStateAnnotation                    = "synack.synadia.io/last-server-account-state"
-	streamServerStateAnnotation                     = "synack.synadia.io/last-server-stream-state"
-	keyValueServerStateAnnotation                   = "synack.synadia.io/last-server-keyvalue-state"
-	objectStoreServerStateAnnotation                = "synack.synadia.io/last-server-objectstore-state"
-	consumerServerStateAnnotation                   = "synack.synadia.io/last-server-consumer-state"
-	natsUserServerStateAnnotation                   = "synack.synadia.io/last-server-natsuser-state"
-	teamServerStateAnnotation                       = "synack.synadia.io/last-server-team-state"
-	teamServiceAccountServerStateAnnotation         = "synack.synadia.io/last-server-teamserviceaccount-state"
-	appUserRoleBindingServerStateAnnotation  = "synack.synadia.io/last-server-appuserrolebinding-state"
+	appliedStateAnnotation = "synack.synadia.io/last-applied-input"
+	serverStateAnnotation  = "synack.synadia.io/last-server-state"
 )
 
 func requeueOnConflict(err error) (ctrl.Result, error) {

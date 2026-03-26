@@ -145,7 +145,7 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 		TeamRoleID:       tsa.Spec.TeamRoleID,
 	}
 
-	appliedState := loadAnnotation(&tsa, teamServiceAccountAppliedStateAnnotation)
+	appliedState := loadAnnotation(&tsa, appliedStateAnnotation)
 	desiredState, err := json.Marshal(in)
 	if err != nil {
 		tsa.Status.Message = err.Error()
@@ -175,7 +175,7 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return requeueReconcileErr, nil
 		}
 
-		lastServerState := loadAnnotation(&tsa, teamServiceAccountServerStateAnnotation)
+		lastServerState := loadAnnotation(&tsa, serverStateAnnotation)
 		if found && lastServerState != nil {
 			diff, err := diffState(serverState, lastServerState)
 			if err != nil {
@@ -218,9 +218,9 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 	readIn.ServiceAccountID = out.ServiceAccountID
 	newServerState, _, _ := r.ControlPlane.ReadTeamServiceAccountState(ctx, readIn)
 
-	annotationsChanged := setAnnotations(&tsa, teamServiceAccountAppliedStateAnnotation, desiredState)
+	annotationsChanged := setAnnotations(&tsa, appliedStateAnnotation, desiredState)
 	if newServerState != nil {
-		if setAnnotations(&tsa, teamServiceAccountServerStateAnnotation, newServerState) {
+		if setAnnotations(&tsa, serverStateAnnotation, newServerState) {
 			annotationsChanged = true
 		}
 	}

@@ -113,7 +113,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		Name:      account.Spec.Name,
 	}
 
-	appliedState := loadAnnotation(&account, accountAppliedStateAnnotation)
+	appliedState := loadAnnotation(&account, appliedStateAnnotation)
 	desiredState, err := json.Marshal(in)
 	if err != nil {
 		account.Status.Message = err.Error()
@@ -143,7 +143,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return requeueReconcileErr, nil
 		}
 
-		lastServerState := loadAnnotation(&account, accountServerStateAnnotation)
+		lastServerState := loadAnnotation(&account, serverStateAnnotation)
 		if found && lastServerState != nil {
 			diff, err := diffState(serverState, lastServerState)
 			if err != nil {
@@ -184,9 +184,9 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	readIn.AccountID = out.AccountID
 	newServerState, _, _ := r.ControlPlane.ReadAccountState(ctx, readIn)
 
-	annotationsChanged := setAnnotations(&account, accountAppliedStateAnnotation, desiredState)
+	annotationsChanged := setAnnotations(&account, appliedStateAnnotation, desiredState)
 	if newServerState != nil {
-		if setAnnotations(&account, accountServerStateAnnotation, newServerState) {
+		if setAnnotations(&account, serverStateAnnotation, newServerState) {
 			annotationsChanged = true
 		}
 	}

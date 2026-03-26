@@ -146,7 +146,7 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		Spec:       consumer.Spec,
 	}
 
-	appliedState := loadAnnotation(&consumer, consumerAppliedStateAnnotation)
+	appliedState := loadAnnotation(&consumer, appliedStateAnnotation)
 	desiredState, err := json.Marshal(in)
 	if err != nil {
 		consumer.Status.Message = err.Error()
@@ -176,7 +176,7 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return requeueReconcileErr, nil
 		}
 
-		lastServerState := loadAnnotation(&consumer, consumerServerStateAnnotation)
+		lastServerState := loadAnnotation(&consumer, serverStateAnnotation)
 		if found && lastServerState != nil {
 			diff, err := diffState(serverState, lastServerState)
 			if err != nil {
@@ -218,9 +218,9 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	readIn.ConsumerID = out.ConsumerID
 	newServerState, _, _ := r.ControlPlane.ReadConsumerState(ctx, readIn)
 
-	annotationsChanged := setAnnotations(&consumer, consumerAppliedStateAnnotation, desiredState)
+	annotationsChanged := setAnnotations(&consumer, appliedStateAnnotation, desiredState)
 	if newServerState != nil {
-		if setAnnotations(&consumer, consumerServerStateAnnotation, newServerState) {
+		if setAnnotations(&consumer, serverStateAnnotation, newServerState) {
 			annotationsChanged = true
 		}
 	}

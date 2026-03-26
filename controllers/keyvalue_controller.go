@@ -153,7 +153,7 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		Sources:      toSCPStreamSources(kv.Spec.Sources),
 	}
 
-	appliedState := loadAnnotation(&kv, keyValueAppliedStateAnnotation)
+	appliedState := loadAnnotation(&kv, appliedStateAnnotation)
 	desiredState, err := json.Marshal(in)
 	if err != nil {
 		kv.Status.Message = err.Error()
@@ -183,7 +183,7 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return requeueReconcileErr, nil
 		}
 
-		lastServerState := loadAnnotation(&kv, keyValueServerStateAnnotation)
+		lastServerState := loadAnnotation(&kv, serverStateAnnotation)
 		if found && lastServerState != nil {
 			diff, err := diffState(serverState, lastServerState)
 			if err != nil {
@@ -224,9 +224,9 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	readIn.KeyValueID = out.KeyValueID
 	newServerState, _, _ := r.ControlPlane.ReadKeyValueState(ctx, readIn)
 
-	annotationsChanged := setAnnotations(&kv, keyValueAppliedStateAnnotation, desiredState)
+	annotationsChanged := setAnnotations(&kv, appliedStateAnnotation, desiredState)
 	if newServerState != nil {
-		if setAnnotations(&kv, keyValueServerStateAnnotation, newServerState) {
+		if setAnnotations(&kv, serverStateAnnotation, newServerState) {
 			annotationsChanged = true
 		}
 	}

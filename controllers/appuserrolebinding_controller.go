@@ -181,7 +181,7 @@ func (r *AppUserRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.R
 		RoleID:        binding.Spec.RoleID,
 	}
 
-	appliedState := loadAnnotation(&binding, appUserRoleBindingAppliedStateAnnotation)
+	appliedState := loadAnnotation(&binding, appliedStateAnnotation)
 	desiredState, err := json.Marshal(in)
 	if err != nil {
 		binding.Status.Message = err.Error()
@@ -211,7 +211,7 @@ func (r *AppUserRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return requeueReconcileErr, nil
 		}
 
-		lastServerState := loadAnnotation(&binding, appUserRoleBindingServerStateAnnotation)
+		lastServerState := loadAnnotation(&binding, serverStateAnnotation)
 		if found && lastServerState != nil {
 			diff, err := diffState(serverState, lastServerState)
 			if err != nil {
@@ -253,9 +253,9 @@ func (r *AppUserRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	newServerState, _, _ := r.ControlPlane.ReadAppUserRoleBindingState(ctx, in)
 
-	annotationsChanged := setAnnotations(&binding, appUserRoleBindingAppliedStateAnnotation, desiredState)
+	annotationsChanged := setAnnotations(&binding, appliedStateAnnotation, desiredState)
 	if newServerState != nil {
-		if setAnnotations(&binding, appUserRoleBindingServerStateAnnotation, newServerState) {
+		if setAnnotations(&binding, serverStateAnnotation, newServerState) {
 			annotationsChanged = true
 		}
 	}

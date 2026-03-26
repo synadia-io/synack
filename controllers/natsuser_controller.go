@@ -146,7 +146,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		Spec:              natsUser.Spec,
 	}
 
-	appliedState := loadAnnotation(&natsUser, natsUserAppliedStateAnnotation)
+	appliedState := loadAnnotation(&natsUser, appliedStateAnnotation)
 	desiredState, err := json.Marshal(in)
 	if err != nil {
 		natsUser.Status.Message = err.Error()
@@ -176,7 +176,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return requeueReconcileErr, nil
 		}
 
-		lastServerState := loadAnnotation(&natsUser, natsUserServerStateAnnotation)
+		lastServerState := loadAnnotation(&natsUser, serverStateAnnotation)
 		if found && lastServerState != nil {
 			diff, err := diffState(serverState, lastServerState)
 			if err != nil {
@@ -219,9 +219,9 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	readIn.NatsUserID = out.NatsUserID
 	newServerState, _, _ := r.ControlPlane.ReadNatsUserState(ctx, readIn)
 
-	annotationsChanged := setAnnotations(&natsUser, natsUserAppliedStateAnnotation, desiredState)
+	annotationsChanged := setAnnotations(&natsUser, appliedStateAnnotation, desiredState)
 	if newServerState != nil {
-		if setAnnotations(&natsUser, natsUserServerStateAnnotation, newServerState) {
+		if setAnnotations(&natsUser, serverStateAnnotation, newServerState) {
 			annotationsChanged = true
 		}
 	}

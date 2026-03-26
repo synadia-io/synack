@@ -149,7 +149,7 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		Metadata:      obj.Spec.Metadata,
 	}
 
-	appliedState := loadAnnotation(&obj, objectStoreAppliedStateAnnotation)
+	appliedState := loadAnnotation(&obj, appliedStateAnnotation)
 	desiredState, err := json.Marshal(in)
 	if err != nil {
 		obj.Status.Message = err.Error()
@@ -179,7 +179,7 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return requeueReconcileErr, nil
 		}
 
-		lastServerState := loadAnnotation(&obj, objectStoreServerStateAnnotation)
+		lastServerState := loadAnnotation(&obj, serverStateAnnotation)
 		if found && lastServerState != nil {
 			diff, err := diffState(serverState, lastServerState)
 			if err != nil {
@@ -220,9 +220,9 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	readIn.ObjectStoreID = out.ObjectStoreID
 	newServerState, _, _ := r.ControlPlane.ReadObjectStoreState(ctx, readIn)
 
-	annotationsChanged := setAnnotations(&obj, objectStoreAppliedStateAnnotation, desiredState)
+	annotationsChanged := setAnnotations(&obj, appliedStateAnnotation, desiredState)
 	if newServerState != nil {
-		if setAnnotations(&obj, objectStoreServerStateAnnotation, newServerState) {
+		if setAnnotations(&obj, serverStateAnnotation, newServerState) {
 			annotationsChanged = true
 		}
 	}

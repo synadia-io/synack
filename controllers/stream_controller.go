@@ -188,7 +188,7 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		Metadata:          stream.Spec.Metadata,
 	}
 
-	appliedState := loadAnnotation(&stream, streamAppliedStateAnnotation)
+	appliedState := loadAnnotation(&stream, appliedStateAnnotation)
 	desiredState, err := json.Marshal(in)
 	if err != nil {
 		stream.Status.Message = err.Error()
@@ -218,7 +218,7 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return requeueReconcileErr, nil
 		}
 
-		lastServerState := loadAnnotation(&stream, streamServerStateAnnotation)
+		lastServerState := loadAnnotation(&stream, serverStateAnnotation)
 		if found && lastServerState != nil {
 			diff, err := diffState(serverState, lastServerState)
 			if err != nil {
@@ -259,9 +259,9 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	readIn.StreamID = out.StreamID
 	newServerState, _, _ := r.ControlPlane.ReadStreamState(ctx, readIn)
 
-	annotationsChanged := setAnnotations(&stream, streamAppliedStateAnnotation, desiredState)
+	annotationsChanged := setAnnotations(&stream, appliedStateAnnotation, desiredState)
 	if newServerState != nil {
-		if setAnnotations(&stream, streamServerStateAnnotation, newServerState) {
+		if setAnnotations(&stream, serverStateAnnotation, newServerState) {
 			annotationsChanged = true
 		}
 	}
