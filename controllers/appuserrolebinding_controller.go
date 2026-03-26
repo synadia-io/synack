@@ -241,7 +241,7 @@ func (r *AppUserRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.R
 	desiredStatus.TeamAppUserID = teamAppUserID
 	desiredStatus.TargetID = targetID
 	desiredStatus.LastAppliedRoleID = binding.Spec.RoleID
-	desiredStatus.Message = "applied"
+	desiredStatus.Message = messageApplied
 
 	if desiredStatus != binding.Status {
 		desiredStatus.LastSynced = time.Now().UTC().Format(time.RFC3339)

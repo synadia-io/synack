@@ -158,7 +158,7 @@ func (r *TeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	desiredStatus := team.Status
 	desiredStatus.ID = out.TeamID
 	desiredStatus.ObservedName = team.Spec.Name
-	desiredStatus.Message = "applied"
+	desiredStatus.Message = messageApplied
 
 	if desiredStatus != team.Status {
 		desiredStatus.LastSynced = time.Now().UTC().Format(time.RFC3339)

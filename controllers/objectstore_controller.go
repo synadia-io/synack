@@ -206,7 +206,7 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	desiredStatus := obj.Status
 	desiredStatus.ObjectStoreID = out.ObjectStoreID
-	desiredStatus.Message = "applied"
+	desiredStatus.Message = messageApplied
 
 	if desiredStatus != obj.Status {
 		desiredStatus.LastSynced = time.Now().UTC().Format(time.RFC3339)

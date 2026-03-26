@@ -204,7 +204,7 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 	desiredStatus.ID = out.ServiceAccountID
 	desiredStatus.TeamAppUserID = out.TeamAppUserID
 	desiredStatus.TeamID = teamID
-	desiredStatus.Message = "applied"
+	desiredStatus.Message = messageApplied
 
 	if desiredStatus != tsa.Status {
 		desiredStatus.LastSynced = time.Now().UTC().Format(time.RFC3339)

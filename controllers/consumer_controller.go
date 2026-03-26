@@ -204,7 +204,7 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	desiredStatus := consumer.Status
 	desiredStatus.ConsumerID = out.ConsumerID
 	desiredStatus.StreamID = out.StreamID
-	desiredStatus.Message = "applied"
+	desiredStatus.Message = messageApplied
 
 	if desiredStatus != consumer.Status {
 		desiredStatus.LastSynced = time.Now().UTC().Format(time.RFC3339)

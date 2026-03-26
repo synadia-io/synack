@@ -170,7 +170,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	desiredStatus := account.Status
 	desiredStatus.AccountID = out.AccountID
-	desiredStatus.Message = "applied"
+	desiredStatus.Message = messageApplied
 
 	if desiredStatus != account.Status {
 		desiredStatus.LastSynced = time.Now().UTC().Format(time.RFC3339)

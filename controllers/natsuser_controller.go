@@ -205,7 +205,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	desiredStatus.NatsUserID = out.NatsUserID
 	desiredStatus.AccountID = out.AccountID
 	desiredStatus.UserPublicKey = out.UserPublicKey
-	desiredStatus.Message = "applied"
+	desiredStatus.Message = messageApplied
 
 	if desiredStatus != natsUser.Status {
 		desiredStatus.LastSynced = time.Now().UTC().Format(time.RFC3339)

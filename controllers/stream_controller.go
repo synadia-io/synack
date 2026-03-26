@@ -245,7 +245,7 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	desiredStatus := stream.Status
 	desiredStatus.StreamID = out.StreamID
-	desiredStatus.Message = "applied"
+	desiredStatus.Message = messageApplied
 
 	if desiredStatus != stream.Status {
 		desiredStatus.LastSynced = time.Now().UTC().Format(time.RFC3339)

@@ -20,6 +20,8 @@ const (
 
 	appliedStateAnnotation = "synack.synadia.io/last-applied-input"
 	serverStateAnnotation  = "synack.synadia.io/last-server-state"
+
+	messageApplied = "applied"
 )
 
 func requeueOnConflict(err error) (ctrl.Result, error) {

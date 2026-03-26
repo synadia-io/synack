@@ -210,7 +210,7 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	desiredStatus := kv.Status
 	desiredStatus.KeyValueID = out.KeyValueID
-	desiredStatus.Message = "applied"
+	desiredStatus.Message = messageApplied
 
 	if desiredStatus != kv.Status {
 		desiredStatus.LastSynced = time.Now().UTC().Format(time.RFC3339)
