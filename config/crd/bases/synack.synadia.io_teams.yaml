@@ -1,0 +1,85 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.0
+  name: teams.synack.synadia.io
+spec:
+  group: synack.synadia.io
+  names:
+    kind: Team
+    listKind: TeamList
+    plural: teams
+    shortNames:
+    - team
+    singular: team
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.name
+      name: Name
+      type: string
+    - jsonPath: .status.id
+      name: TeamID
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Team is the Schema for team resources.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TeamSpec captures desired Team behavior in Control Plane
+              terms.
+            properties:
+              name:
+                description: Name is the human-readable team name.
+                type: string
+              teamId:
+                description: |-
+                  TeamID is the Control Plane team ID.
+                  If omitted on create the controller will create the team and backfill the ID in status.
+                type: string
+            required:
+            - name
+            type: object
+          status:
+            description: TeamStatus reflects observed state from reconciliation.
+            properties:
+              id:
+                type: string
+              lastSynced:
+                type: string
+              message:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              observedName:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

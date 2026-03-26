@@ -1,0 +1,133 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.0
+  name: appuserrolebindings.synack.synadia.io
+spec:
+  group: synack.synadia.io
+  names:
+    kind: AppUserRoleBinding
+    listKind: AppUserRoleBindingList
+    plural: appuserrolebindings
+    shortNames:
+    - aurb
+    singular: appuserrolebinding
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.scope
+      name: Scope
+      type: string
+    - jsonPath: .status.targetId
+      name: TargetID
+      type: string
+    - jsonPath: .spec.roleId
+      name: RoleID
+      type: string
+    - jsonPath: .status.bound
+      name: Bound
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: AppUserRoleBinding is the Schema for app user role binding resources.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AppUserRoleBindingSpec captures desired state for a scoped
+              role assignment.
+            properties:
+              roleId:
+                description: RoleID is the Control Plane role to assign.
+                type: string
+              scope:
+                description: Scope identifies the target resource type.
+                enum:
+                - Team
+                - System
+                - Account
+                - NatsUser
+                type: string
+              subjectRef:
+                description: |-
+                  SubjectRef references a TeamServiceAccount CR in the same namespace.
+                  When set, the resource waits for the TeamServiceAccount status and uses its teamAppUserId.
+                properties:
+                  name:
+                    description: Name is the referenced TeamServiceAccount resource
+                      name in the same namespace.
+                    type: string
+                required:
+                - name
+                type: object
+              targetId:
+                description: |-
+                  TargetID identifies the target resource directly by Control Plane ID.
+                  Mutually exclusive with TargetRef.
+                type: string
+              targetRef:
+                description: |-
+                  TargetRef references a resource CR in the same namespace whose status ID will be used.
+                  For Team scope, this references a Team CR. For Account scope, this references an Account CR.
+                properties:
+                  name:
+                    description: Name is the referenced resource name in the same
+                      namespace.
+                    type: string
+                required:
+                - name
+                type: object
+              teamAppUserId:
+                description: |-
+                  TeamAppUserID identifies the team app user directly. Mutually exclusive with SubjectRef.
+                  Use this for pre-existing service accounts or human users.
+                type: string
+            required:
+            - roleId
+            - scope
+            type: object
+          status:
+            description: AppUserRoleBindingStatus reflects observed state from reconciliation.
+            properties:
+              bound:
+                type: boolean
+              lastAppliedRoleId:
+                type: string
+              lastSynced:
+                type: string
+              message:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              targetId:
+                type: string
+              teamAppUserId:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

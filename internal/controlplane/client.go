@@ -51,9 +51,13 @@ type Client interface {
 	DeleteTeam(ctx context.Context, in TeamInput) error
 	ReadTeamState(ctx context.Context, in TeamInput) ([]byte, bool, error)
 
-	EnsureAccountAccessBinding(ctx context.Context, in AccountAccessBindingInput) (AccountAccessBindingResult, error)
-	DeleteAccountAccessBinding(ctx context.Context, in AccountAccessBindingInput) error
-	ReadAccountAccessBindingState(ctx context.Context, in AccountAccessBindingInput) ([]byte, bool, error)
+	EnsureTeamServiceAccount(ctx context.Context, in TeamServiceAccountInput) (TeamServiceAccountResult, error)
+	DeleteTeamServiceAccount(ctx context.Context, in TeamServiceAccountInput) error
+	ReadTeamServiceAccountState(ctx context.Context, in TeamServiceAccountInput) ([]byte, bool, error)
+
+	EnsureAppUserRoleBinding(ctx context.Context, in AppUserRoleBindingInput) (AppUserRoleBindingResult, error)
+	DeleteAppUserRoleBinding(ctx context.Context, in AppUserRoleBindingInput) error
+	ReadAppUserRoleBindingState(ctx context.Context, in AppUserRoleBindingInput) ([]byte, bool, error)
 }
 
 type Options struct {
