@@ -29,7 +29,7 @@ func (c *client) EnsureAccount(ctx context.Context, in AccountInput) (AccountRes
 		return AccountResult{}, err
 	}
 
-	// If we already know the ID, use it directly — never fall through to create.
+	// If we already know the ID use it directly, don't fall through to create.
 	if in.AccountID != "" {
 		acc, _, err := c.api.AccountAPI.GetAccount(authCtx, in.AccountID).Execute()
 		if err != nil {

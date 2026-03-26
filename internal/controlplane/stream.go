@@ -63,7 +63,7 @@ func (c *client) EnsureStream(ctx context.Context, in StreamInput) (StreamResult
 
 	desired := inputToStreamConfig(in)
 
-	// If we already know the ID, use it directly — never fall through to create.
+	// If we already know the ID use it directly, don't fall through to create.
 	if in.StreamID != "" {
 		updated, _, err := c.api.StreamAPI.UpdateStream(authCtx, in.StreamID).JSStreamConfigRequest(desired).Execute()
 		if err != nil {

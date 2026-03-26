@@ -40,7 +40,7 @@ func (c *client) EnsureNatsUser(ctx context.Context, in NatsUserInput) (NatsUser
 		return NatsUserResult{}, err
 	}
 
-	// If we already know the ID, use it directly — never fall through to create.
+	// If we already know the ID use it directly, don't fall through to create.
 	if in.NatsUserID != "" {
 		name := in.Name
 		updateReq := syncp.NatsUserUpdateRequest{

@@ -45,7 +45,7 @@ func (c *client) EnsureKeyValue(ctx context.Context, in KeyValueInput) (KeyValue
 		return KeyValueResult{}, err
 	}
 
-	// If we already know the ID, use it directly — never fall through to create.
+	// If we already know the ID use it directly, don't fall through to create.
 	if in.KeyValueID != "" {
 		updateReq := inputToKVUpdateConfig(in)
 		updated, _, err := c.api.KvBucketAPI.UpdateKvBucket(authCtx, in.KeyValueID).JSKVBucketUpdateRequest(updateReq).Execute()

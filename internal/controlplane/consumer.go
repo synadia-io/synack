@@ -33,7 +33,7 @@ func (c *client) EnsureConsumer(ctx context.Context, in ConsumerInput) (Consumer
 
 	isPush := in.Spec.DeliverSubject != ""
 
-	// If we already know the ID, use it directly — never fall through to create.
+	// If we already know the ID use it directly, don't fall through to create.
 	if in.ConsumerID != "" {
 		if isPush {
 			updateReq := pushConsumerUpdateConfig(in)
