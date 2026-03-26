@@ -40,7 +40,7 @@ func (c *client) EnsureNatsUser(ctx context.Context, in NatsUserInput) (NatsUser
 		return NatsUserResult{}, err
 	}
 
-	// If we have a known user ID, try update first
+	// If we already know the ID, use it directly — never fall through to create.
 	if in.NatsUserID != "" {
 		name := in.Name
 		updateReq := syncp.NatsUserUpdateRequest{
@@ -49,17 +49,15 @@ func (c *client) EnsureNatsUser(ctx context.Context, in NatsUserInput) (NatsUser
 		}
 
 		updated, _, err := c.api.NatsUserAPI.UpdateNatsUser(authCtx, in.NatsUserID).NatsUserUpdateRequest(updateReq).Execute()
-		if err == nil {
-			l.Info("nats user updated", "resourceID", updated.Id, "accountID", accountID)
-			return NatsUserResult{
-				NatsUserID:    updated.Id,
-				AccountID:     accountID,
-				UserPublicKey: updated.UserPublicKey,
-			}, nil
-		}
-		if !isStatusCode(err, http.StatusNotFound) {
+		if err != nil {
 			return NatsUserResult{}, fmt.Errorf("update nats user by id %q: %w", in.NatsUserID, err)
 		}
+		l.Info("nats user updated", "resourceID", updated.Id, "accountID", accountID)
+		return NatsUserResult{
+			NatsUserID:    updated.Id,
+			AccountID:     accountID,
+			UserPublicKey: updated.UserPublicKey,
+		}, nil
 	}
 
 	// List and match by name
@@ -178,17 +176,17 @@ func (c *client) ReadNatsUserState(ctx context.Context, in NatsUserInput) ([]byt
 
 	if in.NatsUserID != "" {
 		user, _, err := c.api.NatsUserAPI.GetNatsUser(authCtx, in.NatsUserID).Execute()
-		if err == nil {
-			state, err := json.Marshal(user)
-			if err != nil {
-				return nil, false, err
+		if err != nil {
+			if isStatusCode(err, http.StatusNotFound) {
+				return nil, false, nil
 			}
-			return state, true, nil
-		}
-
-		if !isStatusCode(err, http.StatusNotFound) {
 			return nil, false, fmt.Errorf("get nats user by id %q: %w", in.NatsUserID, err)
 		}
+		state, err := json.Marshal(user)
+		if err != nil {
+			return nil, false, err
+		}
+		return state, true, nil
 	}
 
 	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)

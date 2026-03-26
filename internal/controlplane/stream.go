@@ -63,16 +63,14 @@ func (c *client) EnsureStream(ctx context.Context, in StreamInput) (StreamResult
 
 	desired := inputToStreamConfig(in)
 
+	// If we already know the ID, use it directly — never fall through to create.
 	if in.StreamID != "" {
 		updated, _, err := c.api.StreamAPI.UpdateStream(authCtx, in.StreamID).JSStreamConfigRequest(desired).Execute()
-		if err == nil {
-			l.Info("stream updated", "resourceID", updated.Id, "accountID", in.AccountID)
-			return StreamResult{AccountID: in.AccountID, StreamID: updated.Id}, nil
-		}
-
-		if !isStatusCode(err, http.StatusNotFound) {
+		if err != nil {
 			return StreamResult{}, fmt.Errorf("update stream by stream id %q: %w", in.StreamID, err)
 		}
+		l.Info("stream updated", "resourceID", updated.Id, "accountID", in.AccountID)
+		return StreamResult{AccountID: in.AccountID, StreamID: updated.Id}, nil
 	}
 
 	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
@@ -165,16 +163,17 @@ func (c *client) ReadStreamState(ctx context.Context, in StreamInput) ([]byte, b
 
 	if in.StreamID != "" {
 		info, _, err := c.api.StreamAPI.GetStreamInfo(authCtx, in.StreamID).Execute()
-		if err == nil {
-			state, err := json.Marshal(info.Config)
-			if err != nil {
-				return nil, false, err
+		if err != nil {
+			if isStatusCode(err, http.StatusNotFound) {
+				return nil, false, nil
 			}
-			return state, true, nil
-		}
-		if !isStatusCode(err, http.StatusNotFound) {
 			return nil, false, fmt.Errorf("get stream by stream id %q: %w", in.StreamID, err)
 		}
+		state, err := json.Marshal(info.Config)
+		if err != nil {
+			return nil, false, err
+		}
+		return state, true, nil
 	}
 
 	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)

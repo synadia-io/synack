@@ -45,16 +45,15 @@ func (c *client) EnsureKeyValue(ctx context.Context, in KeyValueInput) (KeyValue
 		return KeyValueResult{}, err
 	}
 
+	// If we already know the ID, use it directly — never fall through to create.
 	if in.KeyValueID != "" {
 		updateReq := inputToKVUpdateConfig(in)
 		updated, _, err := c.api.KvBucketAPI.UpdateKvBucket(authCtx, in.KeyValueID).JSKVBucketUpdateRequest(updateReq).Execute()
-		if err == nil {
-			l.Info("keyvalue updated", "resourceID", updated.Id, "accountID", in.AccountID)
-			return KeyValueResult{AccountID: in.AccountID, KeyValueID: updated.Id}, nil
-		}
-		if !isStatusCode(err, http.StatusNotFound) {
+		if err != nil {
 			return KeyValueResult{}, fmt.Errorf("update kv bucket by id %q: %w", in.KeyValueID, err)
 		}
+		l.Info("keyvalue updated", "resourceID", updated.Id, "accountID", in.AccountID)
+		return KeyValueResult{AccountID: in.AccountID, KeyValueID: updated.Id}, nil
 	}
 
 	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
@@ -144,16 +143,17 @@ func (c *client) ReadKeyValueState(ctx context.Context, in KeyValueInput) ([]byt
 
 	if in.KeyValueID != "" {
 		kv, _, err := c.api.KvBucketAPI.GetKvBucket(authCtx, in.KeyValueID).Execute()
-		if err == nil {
-			state, err := json.Marshal(kv.Config)
-			if err != nil {
-				return nil, false, err
+		if err != nil {
+			if isStatusCode(err, http.StatusNotFound) {
+				return nil, false, nil
 			}
-			return state, true, nil
-		}
-		if !isStatusCode(err, http.StatusNotFound) {
 			return nil, false, fmt.Errorf("get kv bucket by id %q: %w", in.KeyValueID, err)
 		}
+		state, err := json.Marshal(kv.Config)
+		if err != nil {
+			return nil, false, err
+		}
+		return state, true, nil
 	}
 
 	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)

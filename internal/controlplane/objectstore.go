@@ -41,17 +41,15 @@ func (c *client) EnsureObjectStore(ctx context.Context, in ObjectStoreInput) (Ob
 		return ObjectStoreResult{}, err
 	}
 
+	// If we already know the ID, use it directly — never fall through to create.
 	if in.ObjectStoreID != "" {
 		updateReq := inputToObjectStoreUpdateConfig(in)
 		updated, _, err := c.api.ObjectBucketAPI.UpdateObjectBucket(authCtx, in.ObjectStoreID).JSObjectBucketUpdateRequest(updateReq).Execute()
-		if err == nil {
-			l.Info("object store updated", "resourceID", updated.Id, "accountID", in.AccountID)
-			return ObjectStoreResult{AccountID: in.AccountID, ObjectStoreID: updated.Id}, nil
-		}
-
-		if !isStatusCode(err, http.StatusNotFound) {
+		if err != nil {
 			return ObjectStoreResult{}, fmt.Errorf("update object bucket by id %q: %w", in.ObjectStoreID, err)
 		}
+		l.Info("object store updated", "resourceID", updated.Id, "accountID", in.AccountID)
+		return ObjectStoreResult{AccountID: in.AccountID, ObjectStoreID: updated.Id}, nil
 	}
 
 	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
@@ -140,16 +138,17 @@ func (c *client) ReadObjectStoreState(ctx context.Context, in ObjectStoreInput) 
 
 	if in.ObjectStoreID != "" {
 		obj, _, err := c.api.ObjectBucketAPI.GetObjectBucket(authCtx, in.ObjectStoreID).Execute()
-		if err == nil {
-			state, err := json.Marshal(obj.Config)
-			if err != nil {
-				return nil, false, err
+		if err != nil {
+			if isStatusCode(err, http.StatusNotFound) {
+				return nil, false, nil
 			}
-			return state, true, nil
-		}
-		if !isStatusCode(err, http.StatusNotFound) {
 			return nil, false, fmt.Errorf("get object bucket by id %q: %w", in.ObjectStoreID, err)
 		}
+		state, err := json.Marshal(obj.Config)
+		if err != nil {
+			return nil, false, err
+		}
+		return state, true, nil
 	}
 
 	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)

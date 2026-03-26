@@ -46,6 +46,14 @@ type Client interface {
 	EnsureNatsUser(ctx context.Context, in NatsUserInput) (NatsUserResult, error)
 	DeleteNatsUser(ctx context.Context, in NatsUserInput) error
 	ReadNatsUserState(ctx context.Context, in NatsUserInput) ([]byte, bool, error)
+
+	EnsureTeam(ctx context.Context, in TeamInput) (TeamResult, error)
+	DeleteTeam(ctx context.Context, in TeamInput) error
+	ReadTeamState(ctx context.Context, in TeamInput) ([]byte, bool, error)
+
+	EnsureAccountAccessBinding(ctx context.Context, in AccountAccessBindingInput) (AccountAccessBindingResult, error)
+	DeleteAccountAccessBinding(ctx context.Context, in AccountAccessBindingInput) error
+	ReadAccountAccessBindingState(ctx context.Context, in AccountAccessBindingInput) ([]byte, bool, error)
 }
 
 type Options struct {

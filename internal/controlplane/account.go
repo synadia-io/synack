@@ -29,6 +29,15 @@ func (c *client) EnsureAccount(ctx context.Context, in AccountInput) (AccountRes
 		return AccountResult{}, err
 	}
 
+	// If we already know the ID, use it directly — never fall through to create.
+	if in.AccountID != "" {
+		acc, _, err := c.api.AccountAPI.GetAccount(authCtx, in.AccountID).Execute()
+		if err != nil {
+			return AccountResult{}, fmt.Errorf("get account %q: %w", in.AccountID, err)
+		}
+		return AccountResult{AccountID: acc.Id}, nil
+	}
+
 	list, _, err := c.api.SystemAPI.ListAccounts(authCtx, in.SystemID).Execute()
 	if err != nil {
 		return AccountResult{}, fmt.Errorf("list accounts: %w", err)
@@ -101,17 +110,17 @@ func (c *client) ReadAccountState(ctx context.Context, in AccountInput) ([]byte,
 
 	if in.AccountID != "" {
 		acc, _, err := c.api.AccountAPI.GetAccount(authCtx, in.AccountID).Execute()
-		if err == nil {
-			state, err := json.Marshal(acc)
-			if err != nil {
-				return nil, false, err
+		if err != nil {
+			if isStatusCode(err, http.StatusNotFound) {
+				return nil, false, nil
 			}
-			return state, true, nil
-		}
-
-		if !isStatusCode(err, http.StatusNotFound) {
 			return nil, false, fmt.Errorf("get account by account id %q: %w", in.AccountID, err)
 		}
+		state, err := json.Marshal(acc)
+		if err != nil {
+			return nil, false, err
+		}
+		return state, true, nil
 	}
 
 	list, _, err := c.api.SystemAPI.ListAccounts(authCtx, in.SystemID).Execute()

@@ -33,28 +33,24 @@ func (c *client) EnsureConsumer(ctx context.Context, in ConsumerInput) (Consumer
 
 	isPush := in.Spec.DeliverSubject != ""
 
+	// If we already know the ID, use it directly — never fall through to create.
 	if in.ConsumerID != "" {
 		if isPush {
 			updateReq := pushConsumerUpdateConfig(in)
 			updated, _, err := c.api.PushConsumerAPI.UpdatePushConsumer(authCtx, in.ConsumerID).JSPushConsumerUpdateRequest(updateReq).Execute()
-			if err == nil {
-				l.Info("push consumer updated", "resourceID", updated.Id, "consumerType", "push")
-				return ConsumerResult{ConsumerID: updated.Id, StreamID: in.StreamID}, nil
-			}
-			if !isStatusCode(err, http.StatusNotFound) {
+			if err != nil {
 				return ConsumerResult{}, fmt.Errorf("update push consumer by id %q: %w", in.ConsumerID, err)
 			}
-		} else {
-			updateReq := pullConsumerUpdateConfig(in)
-			updated, _, err := c.api.PullConsumerAPI.UpdatePullConsumer(authCtx, in.ConsumerID).JSPullConsumerUpdateRequest(updateReq).Execute()
-			if err == nil {
-				l.Info("pull consumer updated", "resourceID", updated.Id, "consumerType", "pull")
-				return ConsumerResult{ConsumerID: updated.Id, StreamID: in.StreamID}, nil
-			}
-			if !isStatusCode(err, http.StatusNotFound) {
-				return ConsumerResult{}, fmt.Errorf("update pull consumer by id %q: %w", in.ConsumerID, err)
-			}
+			l.Info("push consumer updated", "resourceID", updated.Id, "consumerType", "push")
+			return ConsumerResult{ConsumerID: updated.Id, StreamID: in.StreamID}, nil
 		}
+		updateReq := pullConsumerUpdateConfig(in)
+		updated, _, err := c.api.PullConsumerAPI.UpdatePullConsumer(authCtx, in.ConsumerID).JSPullConsumerUpdateRequest(updateReq).Execute()
+		if err != nil {
+			return ConsumerResult{}, fmt.Errorf("update pull consumer by id %q: %w", in.ConsumerID, err)
+		}
+		l.Info("pull consumer updated", "resourceID", updated.Id, "consumerType", "pull")
+		return ConsumerResult{ConsumerID: updated.Id, StreamID: in.StreamID}, nil
 	}
 
 	list, _, err := c.api.StreamAPI.ListConsumers(authCtx, in.StreamID).Execute()
