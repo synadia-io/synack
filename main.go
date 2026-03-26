@@ -120,6 +120,30 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		os.Exit(1)
 	}
+	if err := (&controllers.TeamReconciler{
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		ControlPlane:    cpClient,
+		RequeueInterval: reconcileInterval,
+	}).SetupWithManager(mgr); err != nil {
+		os.Exit(1)
+	}
+	if err := (&controllers.TeamServiceAccountReconciler{
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		ControlPlane:    cpClient,
+		RequeueInterval: reconcileInterval,
+	}).SetupWithManager(mgr); err != nil {
+		os.Exit(1)
+	}
+	if err := (&controllers.AppUserRoleBindingReconciler{
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		ControlPlane:    cpClient,
+		RequeueInterval: reconcileInterval,
+	}).SetupWithManager(mgr); err != nil {
+		os.Exit(1)
+	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		os.Exit(1)

@@ -41,6 +41,11 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	knownAccountID := account.Status.AccountID
+	if account.Spec.AccountID != "" {
+		knownAccountID = account.Spec.AccountID
+	}
+
 	if !account.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&account, accountFinalizer) {
 
@@ -66,7 +71,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			}
 
 			if err := r.ControlPlane.DeleteAccount(ctx, controlplane.AccountInput{
-				AccountID: account.Status.AccountID,
+				AccountID: knownAccountID,
 				SystemID:  account.Spec.SystemID,
 				Name:      account.Spec.Name,
 			}); err != nil {
@@ -103,7 +108,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	in := controlplane.AccountInput{
-		AccountID: account.Status.AccountID,
+		AccountID: knownAccountID,
 		SystemID:  account.Spec.SystemID,
 		Name:      account.Spec.Name,
 	}

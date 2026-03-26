@@ -6,6 +6,10 @@ import (
 
 // AccountSpec captures desired Account behavior in Control Plane terms.
 type AccountSpec struct {
+	// AccountID is the Control Plane account ID.
+	// If omitted on create the controller will create the account and backfill the ID in status.
+	AccountID string `json:"accountId,omitempty"`
+
 	// SystemID identifies the Control Plane system this account belongs to.
 	// +kubebuilder:validation:Required
 	SystemID string `json:"systemId"`
