@@ -50,10 +50,16 @@ func (c *client) EnsureKeyValue(ctx context.Context, in KeyValueInput) (KeyValue
 		updateReq := inputToKVUpdateConfig(in)
 		updated, _, err := c.api.KvBucketAPI.UpdateKvBucket(authCtx, in.KeyValueID).JSKVBucketUpdateRequest(updateReq).Execute()
 		if err != nil {
-			return KeyValueResult{}, fmt.Errorf("update kv bucket by id %q: %w", in.KeyValueID, err)
+			if isStatusCode(err, http.StatusNotFound) {
+				l.Info("known kv bucket ID not found, recreating by bucket name", "resourceID", in.KeyValueID)
+				in.KeyValueID = ""
+			} else {
+				return KeyValueResult{}, fmt.Errorf("update kv bucket by id %q: %w", in.KeyValueID, err)
+			}
+		} else {
+			l.Info("keyvalue updated", "resourceID", updated.Id, "accountID", in.AccountID)
+			return KeyValueResult{AccountID: in.AccountID, KeyValueID: updated.Id}, nil
 		}
-		l.Info("keyvalue updated", "resourceID", updated.Id, "accountID", in.AccountID)
-		return KeyValueResult{AccountID: in.AccountID, KeyValueID: updated.Id}, nil
 	}
 
 	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)

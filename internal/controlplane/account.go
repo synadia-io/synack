@@ -33,9 +33,15 @@ func (c *client) EnsureAccount(ctx context.Context, in AccountInput) (AccountRes
 	if in.AccountID != "" {
 		acc, _, err := c.api.AccountAPI.GetAccount(authCtx, in.AccountID).Execute()
 		if err != nil {
-			return AccountResult{}, fmt.Errorf("get account %q: %w", in.AccountID, err)
+			if isStatusCode(err, http.StatusNotFound) {
+				l.Info("known account ID not found, recreating by name", "resourceID", in.AccountID)
+				in.AccountID = ""
+			} else {
+				return AccountResult{}, fmt.Errorf("get account %q: %w", in.AccountID, err)
+			}
+		} else {
+			return AccountResult{AccountID: acc.Id}, nil
 		}
-		return AccountResult{AccountID: acc.Id}, nil
 	}
 
 	list, _, err := c.api.SystemAPI.ListAccounts(authCtx, in.SystemID).Execute()

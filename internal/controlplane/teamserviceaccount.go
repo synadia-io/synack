@@ -35,41 +35,48 @@ func (c *client) EnsureTeamServiceAccount(ctx context.Context, in TeamServiceAcc
 	if in.ServiceAccountID != "" {
 		existing, _, err := c.api.TeamServiceAccountAPI.GetTeamServiceAccount(authCtx, in.ServiceAccountID).Execute()
 		if err != nil {
-			return TeamServiceAccountResult{}, fmt.Errorf("get team service account %q: %w", in.ServiceAccountID, err)
-		}
-
-		needsUpdate := false
-		update := syncp.ServiceAccountUpdateRequest{}
-
-		if existing.Name != in.Name {
-			name := in.Name
-			update.Name = &name
-			needsUpdate = true
-		}
-		if in.TeamRoleID != "" && existing.RoleId != in.TeamRoleID {
-			roleID := in.TeamRoleID
-			update.RoleId = &roleID
-			needsUpdate = true
-		}
-
-		if needsUpdate {
-			_, _, err := c.api.TeamServiceAccountAPI.UpdateTeamServiceAccount(authCtx, in.ServiceAccountID).ServiceAccountUpdateRequest(update).Execute()
-			if err != nil {
-				return TeamServiceAccountResult{}, fmt.Errorf("update team service account %q: %w", in.ServiceAccountID, err)
+			if isStatusCode(err, http.StatusNotFound) {
+				l.Info("known team service account ID not found, recreating by name", "resourceID", in.ServiceAccountID)
+				in.ServiceAccountID = ""
+			} else {
+				return TeamServiceAccountResult{}, fmt.Errorf("get team service account %q: %w", in.ServiceAccountID, err)
 			}
-			l.Info("team service account updated", "resourceID", existing.Id)
-		}
+		} else {
 
-		tauID, err := extractTeamAppUserID(existing)
-		if err != nil {
-			return TeamServiceAccountResult{}, fmt.Errorf("extract team app user ID from service account %q: %w", in.ServiceAccountID, err)
-		}
+			needsUpdate := false
+			update := syncp.ServiceAccountUpdateRequest{}
 
-		return TeamServiceAccountResult{ServiceAccountID: existing.Id, TeamAppUserID: tauID}, nil
+			if existing.Name != in.Name {
+				name := in.Name
+				update.Name = &name
+				needsUpdate = true
+			}
+			if in.TeamRoleID != "" && existing.RoleId != in.TeamRoleID {
+				roleID := in.TeamRoleID
+				update.RoleId = &roleID
+				needsUpdate = true
+			}
+
+			if needsUpdate {
+				_, _, err := c.api.TeamServiceAccountAPI.UpdateTeamServiceAccount(authCtx, in.ServiceAccountID).ServiceAccountUpdateRequest(update).Execute()
+				if err != nil {
+					return TeamServiceAccountResult{}, fmt.Errorf("update team service account %q: %w", in.ServiceAccountID, err)
+				}
+				l.Info("team service account updated", "resourceID", existing.Id)
+			}
+
+			tauID, err := extractTeamAppUserID(existing)
+			if err != nil {
+				return TeamServiceAccountResult{}, fmt.Errorf("extract team app user ID from service account %q: %w", in.ServiceAccountID, err)
+			}
+
+			return TeamServiceAccountResult{ServiceAccountID: existing.Id, TeamAppUserID: tauID}, nil
+		}
 	}
 
 	createReq := syncp.ServiceAccountCreateRequest{
-		Name: in.Name,
+		Name:      in.Name,
+		Resources: map[string]syncp.AppUserAssignRequest{},
 	}
 	if in.TeamRoleID != "" {
 		createReq.RoleId = in.TeamRoleID
@@ -80,13 +87,24 @@ func (c *client) EnsureTeamServiceAccount(ctx context.Context, in TeamServiceAcc
 		return TeamServiceAccountResult{}, fmt.Errorf("create team service account %q: %w", in.Name, err)
 	}
 
-	tauID, err := extractTeamAppUserID(created)
+	list, _, err := c.api.TeamAPI.ListTeamInfoAppUsers(authCtx, in.TeamID).Execute()
 	if err != nil {
-		return TeamServiceAccountResult{}, fmt.Errorf("extract team app user ID from new service account %q: %w", in.Name, err)
+		// Not fatal
+		l.Error(err, "failed to list team info app users")
 	}
 
-	l.Info("team service account created", "resourceID", created.Id, "teamAppUserId", tauID)
-	return TeamServiceAccountResult{ServiceAccountID: created.Id, TeamAppUserID: tauID}, nil
+	appUserID := ""
+	if list != nil {
+		for _, item := range list.Items {
+			if item.Id == created.Id {
+				appUserID = item.AppUser.Id
+				break
+			}
+		}
+	}
+
+	l.Info("team service account created", "resourceID", created.Id, "teamAppUserId", appUserID)
+	return TeamServiceAccountResult{ServiceAccountID: created.Id, TeamAppUserID: appUserID}, nil
 }
 
 // extractTeamAppUserID finds the TeamAppUser.Id from the service account's Resources map.

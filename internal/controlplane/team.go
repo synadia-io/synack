@@ -31,20 +31,25 @@ func (c *client) EnsureTeam(ctx context.Context, in TeamInput) (TeamResult, erro
 	if in.TeamID != "" {
 		existing, _, err := c.api.TeamAPI.GetTeam(authCtx, in.TeamID).Execute()
 		if err != nil {
+			if isStatusCode(err, http.StatusNotFound) {
+				l.Info("known team ID not found, recreating by name", "resourceID", in.TeamID)
+				in.TeamID = ""
+			} else {
 			return TeamResult{}, fmt.Errorf("get team %q: %w", in.TeamID, err)
-		}
-
-		if existing.Name != in.Name {
-			name := in.Name
-			updated, _, err := c.api.TeamAPI.UpdateTeam(authCtx, in.TeamID).TeamUpdateRequest(syncp.TeamUpdateRequest{
-				Name: &name,
-			}).Execute()
-			if err != nil {
-				return TeamResult{}, fmt.Errorf("update team %q: %w", in.TeamID, err)
 			}
-			l.Info("team updated", "resourceID", updated.Id)
+		} else {
+			if existing.Name != in.Name {
+				name := in.Name
+				updated, _, err := c.api.TeamAPI.UpdateTeam(authCtx, in.TeamID).TeamUpdateRequest(syncp.TeamUpdateRequest{
+					Name: &name,
+				}).Execute()
+				if err != nil {
+					return TeamResult{}, fmt.Errorf("update team %q: %w", in.TeamID, err)
+				}
+				l.Info("team updated", "resourceID", updated.Id)
+			}
+			return TeamResult{TeamID: existing.Id}, nil
 		}
-		return TeamResult{TeamID: existing.Id}, nil
 	}
 
 	created, _, err := c.api.SessionAPI.CreateTeam(authCtx).TeamCreateRequest(syncp.TeamCreateRequest{

@@ -67,10 +67,16 @@ func (c *client) EnsureStream(ctx context.Context, in StreamInput) (StreamResult
 	if in.StreamID != "" {
 		updated, _, err := c.api.StreamAPI.UpdateStream(authCtx, in.StreamID).JSStreamConfigRequest(desired).Execute()
 		if err != nil {
-			return StreamResult{}, fmt.Errorf("update stream by stream id %q: %w", in.StreamID, err)
+			if isStatusCode(err, http.StatusNotFound) {
+				l.Info("known stream ID not found, recreating by name", "resourceID", in.StreamID)
+				in.StreamID = ""
+			} else {
+				return StreamResult{}, fmt.Errorf("update stream by stream id %q: %w", in.StreamID, err)
+			}
+		} else {
+			l.Info("stream updated", "resourceID", updated.Id, "accountID", in.AccountID)
+			return StreamResult{AccountID: in.AccountID, StreamID: updated.Id}, nil
 		}
-		l.Info("stream updated", "resourceID", updated.Id, "accountID", in.AccountID)
-		return StreamResult{AccountID: in.AccountID, StreamID: updated.Id}, nil
 	}
 
 	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)

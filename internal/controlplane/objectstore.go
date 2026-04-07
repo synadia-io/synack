@@ -46,10 +46,16 @@ func (c *client) EnsureObjectStore(ctx context.Context, in ObjectStoreInput) (Ob
 		updateReq := inputToObjectStoreUpdateConfig(in)
 		updated, _, err := c.api.ObjectBucketAPI.UpdateObjectBucket(authCtx, in.ObjectStoreID).JSObjectBucketUpdateRequest(updateReq).Execute()
 		if err != nil {
-			return ObjectStoreResult{}, fmt.Errorf("update object bucket by id %q: %w", in.ObjectStoreID, err)
+			if isStatusCode(err, http.StatusNotFound) {
+				l.Info("known object bucket ID not found, recreating by bucket name", "resourceID", in.ObjectStoreID)
+				in.ObjectStoreID = ""
+			} else {
+				return ObjectStoreResult{}, fmt.Errorf("update object bucket by id %q: %w", in.ObjectStoreID, err)
+			}
+		} else {
+			l.Info("object store updated", "resourceID", updated.Id, "accountID", in.AccountID)
+			return ObjectStoreResult{AccountID: in.AccountID, ObjectStoreID: updated.Id}, nil
 		}
-		l.Info("object store updated", "resourceID", updated.Id, "accountID", in.AccountID)
-		return ObjectStoreResult{AccountID: in.AccountID, ObjectStoreID: updated.Id}, nil
 	}
 
 	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)

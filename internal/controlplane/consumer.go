@@ -39,18 +39,32 @@ func (c *client) EnsureConsumer(ctx context.Context, in ConsumerInput) (Consumer
 			updateReq := pushConsumerUpdateConfig(in)
 			updated, _, err := c.api.PushConsumerAPI.UpdatePushConsumer(authCtx, in.ConsumerID).JSPushConsumerUpdateRequest(updateReq).Execute()
 			if err != nil {
-				return ConsumerResult{}, fmt.Errorf("update push consumer by id %q: %w", in.ConsumerID, err)
+				if isStatusCode(err, http.StatusNotFound) {
+					l.Info("known push consumer ID not found, recreating by name", "resourceID", in.ConsumerID)
+					in.ConsumerID = ""
+				} else {
+					return ConsumerResult{}, fmt.Errorf("update push consumer by id %q: %w", in.ConsumerID, err)
+				}
+			} else {
+				l.Info("push consumer updated", "resourceID", updated.Id, "consumerType", "push")
+				return ConsumerResult{ConsumerID: updated.Id, StreamID: in.StreamID}, nil
 			}
-			l.Info("push consumer updated", "resourceID", updated.Id, "consumerType", "push")
-			return ConsumerResult{ConsumerID: updated.Id, StreamID: in.StreamID}, nil
 		}
-		updateReq := pullConsumerUpdateConfig(in)
-		updated, _, err := c.api.PullConsumerAPI.UpdatePullConsumer(authCtx, in.ConsumerID).JSPullConsumerUpdateRequest(updateReq).Execute()
-		if err != nil {
-			return ConsumerResult{}, fmt.Errorf("update pull consumer by id %q: %w", in.ConsumerID, err)
+		if in.ConsumerID != "" {
+			updateReq := pullConsumerUpdateConfig(in)
+			updated, _, err := c.api.PullConsumerAPI.UpdatePullConsumer(authCtx, in.ConsumerID).JSPullConsumerUpdateRequest(updateReq).Execute()
+			if err != nil {
+				if isStatusCode(err, http.StatusNotFound) {
+					l.Info("known pull consumer ID not found, recreating by name", "resourceID", in.ConsumerID)
+					in.ConsumerID = ""
+				} else {
+					return ConsumerResult{}, fmt.Errorf("update pull consumer by id %q: %w", in.ConsumerID, err)
+				}
+			} else {
+				l.Info("pull consumer updated", "resourceID", updated.Id, "consumerType", "pull")
+				return ConsumerResult{ConsumerID: updated.Id, StreamID: in.StreamID}, nil
+			}
 		}
-		l.Info("pull consumer updated", "resourceID", updated.Id, "consumerType", "pull")
-		return ConsumerResult{ConsumerID: updated.Id, StreamID: in.StreamID}, nil
 	}
 
 	list, _, err := c.api.StreamAPI.ListConsumers(authCtx, in.StreamID).Execute()

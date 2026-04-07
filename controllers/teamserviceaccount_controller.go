@@ -202,7 +202,6 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	desiredStatus := tsa.Status
 	desiredStatus.ID = out.ServiceAccountID
-	desiredStatus.TeamAppUserID = out.TeamAppUserID
 	desiredStatus.TeamID = teamID
 	desiredStatus.Message = messageApplied
 
