@@ -85,6 +85,20 @@ spec:
               bearerToken:
                 description: BearerToken enables bearer token mode.
                 type: boolean
+              credentialsSecret:
+                description: CredentialsSecret configures writing downloaded credentials
+                  into a Kubernetes Secret.
+                properties:
+                  key:
+                    default: creds
+                    description: Key is the Secret data key for the creds content.
+                    type: string
+                  name:
+                    description: Name is the Secret name to write credentials into.
+                    type: string
+                required:
+                - name
+                type: object
               data:
                 description: Data sets the data limit (bytes, -1 unlimited).
                 format: int64
@@ -130,6 +144,10 @@ spec:
             description: NatsUserStatus reflects observed state from reconciliation.
             properties:
               accountId:
+                type: string
+              credentialsLastSynced:
+                type: string
+              credentialsSecretName:
                 type: string
               lastSynced:
                 type: string
