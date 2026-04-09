@@ -112,16 +112,16 @@ func (c *client) assignForScope(ctx context.Context, in AppUserRoleBindingInput)
 	switch in.Scope {
 	case RoleBindingScopeTeam:
 		_, _, err := c.api.TeamAPI.UpdateTeamAppUser(ctx, in.TargetID, in.TeamAppUserID).AppUserAssignRequest(req).Execute()
-		return err
+		return withAPIError(err)
 	case RoleBindingScopeSystem:
 		_, _, err := c.api.SystemAPI.AssignSystemTeamAppUser(ctx, in.TargetID, in.TeamAppUserID).AppUserAssignRequest(req).Execute()
-		return err
+		return withAPIError(err)
 	case RoleBindingScopeAccount:
 		_, _, err := c.api.AccountAPI.AssignAccountTeamAppUser(ctx, in.TargetID, in.TeamAppUserID).AppUserAssignRequest(req).Execute()
-		return err
+		return withAPIError(err)
 	case RoleBindingScopeNatsUser:
 		_, _, err := c.api.NatsUserAPI.AssignNatsUserTeamAppUser(ctx, in.TargetID, in.TeamAppUserID).AppUserAssignRequest(req).Execute()
-		return err
+		return withAPIError(err)
 	default:
 		return fmt.Errorf("unsupported scope: %s", in.Scope)
 	}
@@ -132,16 +132,16 @@ func (c *client) unassignForScope(ctx context.Context, in AppUserRoleBindingInpu
 	switch in.Scope {
 	case RoleBindingScopeTeam:
 		_, err := c.api.TeamAPI.UnAssignTeamAppUser(ctx, in.TargetID, in.TeamAppUserID).Execute()
-		return err
+		return withAPIError(err)
 	case RoleBindingScopeSystem:
 		_, err := c.api.SystemAPI.UnAssignSystemTeamAppUser(ctx, in.TargetID, in.TeamAppUserID).Execute()
-		return err
+		return withAPIError(err)
 	case RoleBindingScopeAccount:
 		_, err := c.api.AccountAPI.UnAssignAccountTeamAppUser(ctx, in.TargetID, in.TeamAppUserID).Execute()
-		return err
+		return withAPIError(err)
 	case RoleBindingScopeNatsUser:
 		_, err := c.api.NatsUserAPI.UnAssignNatsUserTeamAppUser(ctx, in.TargetID, in.TeamAppUserID).Execute()
-		return err
+		return withAPIError(err)
 	default:
 		return fmt.Errorf("unsupported scope: %s", in.Scope)
 	}
@@ -153,6 +153,7 @@ func (c *client) readRoleBindingForScope(ctx context.Context, in AppUserRoleBind
 	case RoleBindingScopeTeam:
 		list, _, err := c.api.TeamAPI.ListTeamAppUsers(ctx, in.TargetID).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			return nil, false, fmt.Errorf("list team app users: %w", err)
 		}
 		for _, item := range list.Items {
@@ -165,6 +166,7 @@ func (c *client) readRoleBindingForScope(ctx context.Context, in AppUserRoleBind
 	case RoleBindingScopeSystem:
 		list, _, err := c.api.SystemAPI.ListSystemTeamAppUsers(ctx, in.TargetID).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			return nil, false, fmt.Errorf("list system team app users: %w", err)
 		}
 		for _, item := range list.Items {
@@ -177,6 +179,7 @@ func (c *client) readRoleBindingForScope(ctx context.Context, in AppUserRoleBind
 	case RoleBindingScopeAccount:
 		list, _, err := c.api.AccountAPI.ListAccountTeamAppUsers(ctx, in.TargetID).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			return nil, false, fmt.Errorf("list account team app users: %w", err)
 		}
 		for _, item := range list.Items {
@@ -189,6 +192,7 @@ func (c *client) readRoleBindingForScope(ctx context.Context, in AppUserRoleBind
 	case RoleBindingScopeNatsUser:
 		list, _, err := c.api.NatsUserAPI.ListNatsUserTeamAppUsers(ctx, in.TargetID).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			return nil, false, fmt.Errorf("list nats user team app users: %w", err)
 		}
 		for _, item := range list.Items {

@@ -33,6 +33,7 @@ func (c *client) EnsureAccount(ctx context.Context, in AccountInput) (AccountRes
 	if in.AccountID != "" {
 		acc, _, err := c.api.AccountAPI.GetAccount(authCtx, in.AccountID).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			if isStatusCode(err, http.StatusNotFound) {
 				l.Info("known account ID not found, recreating by name", "resourceID", in.AccountID)
 				in.AccountID = ""
@@ -46,6 +47,7 @@ func (c *client) EnsureAccount(ctx context.Context, in AccountInput) (AccountRes
 
 	list, _, err := c.api.SystemAPI.ListAccounts(authCtx, in.SystemID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return AccountResult{}, fmt.Errorf("list accounts: %w", err)
 	}
 
@@ -58,6 +60,7 @@ func (c *client) EnsureAccount(ctx context.Context, in AccountInput) (AccountRes
 	createReq := syncp.AccountCreateRequest{Name: in.Name}
 	created, _, err := c.api.SystemAPI.CreateAccount(authCtx, in.SystemID).AccountCreateRequest(createReq).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return AccountResult{}, fmt.Errorf("create account %q: %w", in.Name, err)
 	}
 
@@ -78,6 +81,7 @@ func (c *client) DeleteAccount(ctx context.Context, in AccountInput) error {
 	if accountID == "" {
 		list, _, err := c.api.SystemAPI.ListAccounts(authCtx, in.SystemID).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			return fmt.Errorf("list accounts for delete: %w", err)
 		}
 
@@ -104,6 +108,7 @@ func (c *client) DeleteAccount(ctx context.Context, in AccountInput) error {
 		l.Info("account deleted", "resourceID", accountID, "systemID", in.SystemID)
 		return nil
 	}
+	err = withAPIError(err)
 
 	return fmt.Errorf("delete account %q: %w", accountID, err)
 }
@@ -117,6 +122,7 @@ func (c *client) ReadAccountState(ctx context.Context, in AccountInput) ([]byte,
 	if in.AccountID != "" {
 		acc, _, err := c.api.AccountAPI.GetAccount(authCtx, in.AccountID).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			if isStatusCode(err, http.StatusNotFound) {
 				return nil, false, nil
 			}
@@ -131,6 +137,7 @@ func (c *client) ReadAccountState(ctx context.Context, in AccountInput) ([]byte,
 
 	list, _, err := c.api.SystemAPI.ListAccounts(authCtx, in.SystemID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return nil, false, fmt.Errorf("list accounts: %w", err)
 	}
 

@@ -4,6 +4,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// NatsUserCredentialsSecret configures where generated credentials are stored.
+type NatsUserCredentialsSecret struct {
+	// Name is the Secret name to write credentials into.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// Key is the Secret data key for the creds content.
+	// +kubebuilder:default="creds"
+	Key string `json:"key,omitempty"`
+}
+
 // NatsUserSpec captures desired NATS User behavior in Control Plane terms.
 type NatsUserSpec struct {
 	// Account selection (inline AccountSelector).
@@ -40,16 +51,21 @@ type NatsUserSpec struct {
 
 	// Tags are user-defined tags.
 	Tags []string `json:"tags,omitempty"`
+
+	// CredentialsSecret configures writing downloaded credentials into a Kubernetes Secret.
+	CredentialsSecret *NatsUserCredentialsSecret `json:"credentialsSecret,omitempty"`
 }
 
 // NatsUserStatus reflects observed state from reconciliation.
 type NatsUserStatus struct {
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
-	NatsUserID         string `json:"natsUserId,omitempty"`
-	AccountID          string `json:"accountId,omitempty"`
-	UserPublicKey      string `json:"userPublicKey,omitempty"`
-	LastSynced         string `json:"lastSynced,omitempty"`
-	Message            string `json:"message,omitempty"`
+	ObservedGeneration    int64  `json:"observedGeneration,omitempty"`
+	NatsUserID            string `json:"natsUserId,omitempty"`
+	AccountID             string `json:"accountId,omitempty"`
+	UserPublicKey         string `json:"userPublicKey,omitempty"`
+	CredentialsSecretName string `json:"credentialsSecretName,omitempty"`
+	CredentialsLastSynced string `json:"credentialsLastSynced,omitempty"`
+	LastSynced            string `json:"lastSynced,omitempty"`
+	Message               string `json:"message,omitempty"`
 }
 
 // +kubebuilder:object:root=true

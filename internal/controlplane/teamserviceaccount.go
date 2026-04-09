@@ -35,6 +35,7 @@ func (c *client) EnsureTeamServiceAccount(ctx context.Context, in TeamServiceAcc
 	if in.ServiceAccountID != "" {
 		existing, _, err := c.api.TeamServiceAccountAPI.GetTeamServiceAccount(authCtx, in.ServiceAccountID).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			if isStatusCode(err, http.StatusNotFound) {
 				l.Info("known team service account ID not found, recreating by name", "resourceID", in.ServiceAccountID)
 				in.ServiceAccountID = ""
@@ -60,6 +61,7 @@ func (c *client) EnsureTeamServiceAccount(ctx context.Context, in TeamServiceAcc
 			if needsUpdate {
 				_, _, err := c.api.TeamServiceAccountAPI.UpdateTeamServiceAccount(authCtx, in.ServiceAccountID).ServiceAccountUpdateRequest(update).Execute()
 				if err != nil {
+					err = withAPIError(err)
 					return TeamServiceAccountResult{}, fmt.Errorf("update team service account %q: %w", in.ServiceAccountID, err)
 				}
 				l.Info("team service account updated", "resourceID", existing.Id)
@@ -84,11 +86,13 @@ func (c *client) EnsureTeamServiceAccount(ctx context.Context, in TeamServiceAcc
 
 	created, _, err := c.api.TeamAPI.CreateTeamServiceAccount(authCtx, in.TeamID).ServiceAccountCreateRequest(createReq).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return TeamServiceAccountResult{}, fmt.Errorf("create team service account %q: %w", in.Name, err)
 	}
 
 	list, _, err := c.api.TeamAPI.ListTeamInfoAppUsers(authCtx, in.TeamID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		// Not fatal
 		l.Error(err, "failed to list team info app users")
 	}
@@ -135,6 +139,7 @@ func (c *client) DeleteTeamServiceAccount(ctx context.Context, in TeamServiceAcc
 		l.Info("team service account deleted", "resourceID", in.ServiceAccountID)
 		return nil
 	}
+	err = withAPIError(err)
 
 	return fmt.Errorf("delete team service account %q: %w", in.ServiceAccountID, err)
 }
@@ -151,6 +156,7 @@ func (c *client) ReadTeamServiceAccountState(ctx context.Context, in TeamService
 
 	sa, _, err := c.api.TeamServiceAccountAPI.GetTeamServiceAccount(authCtx, in.ServiceAccountID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		if isStatusCode(err, http.StatusNotFound) {
 			return nil, false, nil
 		}

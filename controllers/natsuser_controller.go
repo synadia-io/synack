@@ -1,12 +1,17 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"reflect"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -29,11 +34,15 @@ type NatsUserReconciler struct {
 }
 
 const natsUserFinalizer = "synack.synadia.io/natsuser-finalizer"
+const defaultNatsUserCredsKey = "creds"
+const natsUserSecretUIDAnnotation = "synack.synadia.io/natsuser-uid"
+const natsUserSecretOwnerLabel = "synack.synadia.io/natsuser"
 
 // +kubebuilder:rbac:groups=synack.synadia.io,resources=natsusers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=synack.synadia.io,resources=natsusers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=synack.synadia.io,resources=natsusers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=synack.synadia.io,resources=accounts,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch
 
 func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
@@ -202,10 +211,51 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	desiredStatus := natsUser.Status
+	previousCredentialsSecretName := natsUser.Status.CredentialsSecretName
 	desiredStatus.NatsUserID = out.NatsUserID
 	desiredStatus.AccountID = out.AccountID
 	desiredStatus.UserPublicKey = out.UserPublicKey
 	desiredStatus.Message = messageApplied
+
+	if natsUser.Spec.CredentialsSecret != nil {
+		secretName, key := credentialsSecretConfig(natsUser.Spec.CredentialsSecret)
+		creds, err := r.ControlPlane.DownloadNatsUserCreds(ctx, out.NatsUserID)
+		if err != nil {
+			l.Error(err, "failed to download nats user credentials")
+			natsUser.Status.Message = err.Error()
+			if err := r.Status().Update(ctx, &natsUser); err != nil {
+				l.Error(err, "failed to update nats user status")
+			}
+			return requeueReconcileErr, nil
+		}
+
+		updated, err := r.reconcileCredentialsSecret(ctx, &natsUser, creds, key)
+		if err != nil {
+			l.Error(err, "failed to reconcile credentials secret", "secretName", secretName)
+			natsUser.Status.Message = err.Error()
+			if err := r.Status().Update(ctx, &natsUser); err != nil {
+				l.Error(err, "failed to update nats user status")
+			}
+			return requeueReconcileErr, nil
+		}
+
+		desiredStatus.CredentialsSecretName = secretName
+		if desiredStatus.CredentialsLastSynced == "" || updated || desiredStatus.CredentialsSecretName != natsUser.Status.CredentialsSecretName {
+			desiredStatus.CredentialsLastSynced = time.Now().UTC().Format(time.RFC3339)
+		}
+	} else {
+		desiredStatus.CredentialsSecretName = ""
+		desiredStatus.CredentialsLastSynced = ""
+	}
+
+	if err := r.cleanupPreviousCredentialsSecret(ctx, &natsUser, previousCredentialsSecretName, desiredStatus.CredentialsSecretName); err != nil {
+		l.Error(err, "failed to clean up previous credentials secret")
+		natsUser.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &natsUser); err != nil {
+			l.Error(err, "failed to update nats user status")
+		}
+		return requeueReconcileErr, nil
+	}
 
 	if desiredStatus != natsUser.Status {
 		desiredStatus.LastSynced = time.Now().UTC().Format(time.RFC3339)
@@ -268,4 +318,146 @@ func (r *NatsUserReconciler) enqueueNatsUsersForAccount(ctx context.Context, obj
 		})
 	}
 	return requests
+}
+
+func credentialsSecretConfig(spec *natsv1.NatsUserCredentialsSecret) (string, string) {
+	key := spec.Key
+	if key == "" {
+		key = defaultNatsUserCredsKey
+	}
+	return spec.Name, key
+}
+
+func (r *NatsUserReconciler) reconcileCredentialsSecret(ctx context.Context, natsUser *natsv1.NatsUser, creds, key string) (bool, error) {
+	secretName := natsUser.Spec.CredentialsSecret.Name
+	if secretName == "" {
+		return false, fmt.Errorf("spec.credentialsSecret.name is required")
+	}
+
+	secretNN := types.NamespacedName{
+		Namespace: natsUser.Namespace,
+		Name:      secretName,
+	}
+	var existing corev1.Secret
+	if err := r.Get(ctx, secretNN, &existing); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return false, err
+		}
+
+		secret := corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: natsUser.Namespace,
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "synack",
+					natsUserSecretOwnerLabel:       natsUser.Name,
+				},
+				Annotations: map[string]string{
+					natsUserSecretUIDAnnotation: string(natsUser.UID),
+				},
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{
+				key: []byte(creds),
+			},
+		}
+
+		if err := controllerutil.SetControllerReference(natsUser, &secret, r.Scheme); err != nil {
+			return false, err
+		}
+		if err := r.Create(ctx, &secret); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	updated := existing.DeepCopy()
+	changed := false
+
+	if updated.Labels == nil {
+		updated.Labels = map[string]string{}
+	}
+	if updated.Labels["app.kubernetes.io/managed-by"] != "synack" {
+		updated.Labels["app.kubernetes.io/managed-by"] = "synack"
+		changed = true
+	}
+	if updated.Labels[natsUserSecretOwnerLabel] != natsUser.Name {
+		updated.Labels[natsUserSecretOwnerLabel] = natsUser.Name
+		changed = true
+	}
+
+	if updated.Annotations == nil {
+		updated.Annotations = map[string]string{}
+	}
+	if updated.Annotations[natsUserSecretUIDAnnotation] != string(natsUser.UID) {
+		updated.Annotations[natsUserSecretUIDAnnotation] = string(natsUser.UID)
+		changed = true
+	}
+
+	if updated.Data == nil {
+		updated.Data = map[string][]byte{}
+	}
+	if !bytes.Equal(updated.Data[key], []byte(creds)) {
+		updated.Data[key] = []byte(creds)
+		changed = true
+	}
+
+	ownerRefs := append([]metav1.OwnerReference(nil), updated.OwnerReferences...)
+	if err := controllerutil.SetControllerReference(natsUser, updated, r.Scheme); err != nil {
+		return false, err
+	}
+	if !reflect.DeepEqual(ownerRefs, updated.OwnerReferences) {
+		changed = true
+	}
+
+	if !changed {
+		return false, nil
+	}
+
+	if err := r.Update(ctx, updated); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (r *NatsUserReconciler) cleanupPreviousCredentialsSecret(ctx context.Context, natsUser *natsv1.NatsUser, previousName, currentName string) error {
+	if previousName == "" || previousName == currentName {
+		return nil
+	}
+
+	secretNN := types.NamespacedName{
+		Namespace: natsUser.Namespace,
+		Name:      previousName,
+	}
+
+	var secret corev1.Secret
+	if err := r.Get(ctx, secretNN, &secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	if !ownedByNatsUser(&secret, natsUser) {
+		return nil
+	}
+	return r.Delete(ctx, &secret)
+}
+
+func ownedByNatsUser(secret *corev1.Secret, natsUser *natsv1.NatsUser) bool {
+	if secret == nil || natsUser == nil {
+		return false
+	}
+
+	if secret.Annotations[natsUserSecretUIDAnnotation] == string(natsUser.UID) {
+		return true
+	}
+
+	for _, owner := range secret.OwnerReferences {
+		if owner.UID == natsUser.UID {
+			return true
+		}
+	}
+
+	return false
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/synadia-io/control-plane-sdk-go/syncp"
+	"github.com/tidwall/gjson"
 )
 
 var ErrAccountNotFound = errors.New("account not found in control plane")
@@ -46,6 +47,7 @@ type Client interface {
 	EnsureNatsUser(ctx context.Context, in NatsUserInput) (NatsUserResult, error)
 	DeleteNatsUser(ctx context.Context, in NatsUserInput) error
 	ReadNatsUserState(ctx context.Context, in NatsUserInput) ([]byte, bool, error)
+	DownloadNatsUserCreds(ctx context.Context, natsUserID string) (string, error)
 
 	EnsureTeam(ctx context.Context, in TeamInput) (TeamResult, error)
 	DeleteTeam(ctx context.Context, in TeamInput) error
@@ -91,6 +93,71 @@ func NewClient(opts Options) (Client, error) {
 	}, nil
 }
 
+type apiError struct {
+	err  error
+	code int
+	body string
+}
+
+func withAPIError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	if apiErr, ok := err.(*apiError); ok {
+		return apiErr
+	}
+
+	openAPIErr, value := openAPIError(err)
+	if openAPIErr == nil {
+		return err
+	}
+
+	return &apiError{
+		err:  err,
+		code: openAPIErr.Code(),
+		body: value,
+	}
+}
+
+func (e *apiError) Error() string {
+	if e == nil || e.err == nil {
+		return ""
+	}
+	if e.body == "" {
+		return e.err.Error()
+	}
+	return fmt.Sprintf("%s (error: %s)", e.err.Error(), e.body)
+}
+
+func (e *apiError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.err
+}
+
+func (e *apiError) Code() int {
+	if e == nil {
+		return 0
+	}
+	return e.code
+}
+
+func openAPIError(err error) (*syncp.GenericOpenAPIError, string) {
+	var openAPIError *syncp.GenericOpenAPIError
+	if !errors.As(err, &openAPIError) || openAPIError == nil {
+		return nil, ""
+	}
+
+	field := gjson.GetBytes(openAPIError.Body(), "error")
+	if !field.Exists() {
+		return openAPIError, ""
+	}
+
+	return openAPIError, field.String()
+}
+
 func (c *client) resolveAccountID(ctx context.Context, sel AccountSelectors) (string, error) {
 	if sel.AccountID != "" {
 		return sel.AccountID, nil
@@ -106,6 +173,7 @@ func (c *client) resolveAccountID(ctx context.Context, sel AccountSelectors) (st
 
 	list, _, err := c.api.SystemAPI.ListAccounts(ctx, sel.SystemID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return "", fmt.Errorf("list accounts for nkey resolution: %w", err)
 	}
 
@@ -135,14 +203,9 @@ func tokenFromEnv(name string) (string, error) {
 }
 
 func isStatusCode(err error, code int) bool {
-	if err == nil {
-		return false
+	if apiErr, ok := err.(*apiError); ok {
+		return apiErr.Code() == code
 	}
-	var withCode interface {
-		Code() int
-	}
-	if errors.As(err, &withCode) {
-		return withCode.Code() == code
-	}
+
 	return false
 }

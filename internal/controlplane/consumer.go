@@ -39,6 +39,7 @@ func (c *client) EnsureConsumer(ctx context.Context, in ConsumerInput) (Consumer
 			updateReq := pushConsumerUpdateConfig(in)
 			updated, _, err := c.api.PushConsumerAPI.UpdatePushConsumer(authCtx, in.ConsumerID).JSPushConsumerUpdateRequest(updateReq).Execute()
 			if err != nil {
+				err = withAPIError(err)
 				if isStatusCode(err, http.StatusNotFound) {
 					l.Info("known push consumer ID not found, recreating by name", "resourceID", in.ConsumerID)
 					in.ConsumerID = ""
@@ -54,6 +55,7 @@ func (c *client) EnsureConsumer(ctx context.Context, in ConsumerInput) (Consumer
 			updateReq := pullConsumerUpdateConfig(in)
 			updated, _, err := c.api.PullConsumerAPI.UpdatePullConsumer(authCtx, in.ConsumerID).JSPullConsumerUpdateRequest(updateReq).Execute()
 			if err != nil {
+				err = withAPIError(err)
 				if isStatusCode(err, http.StatusNotFound) {
 					l.Info("known pull consumer ID not found, recreating by name", "resourceID", in.ConsumerID)
 					in.ConsumerID = ""
@@ -69,6 +71,7 @@ func (c *client) EnsureConsumer(ctx context.Context, in ConsumerInput) (Consumer
 
 	list, _, err := c.api.StreamAPI.ListConsumers(authCtx, in.StreamID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return ConsumerResult{}, fmt.Errorf("list consumers: %w", err)
 	}
 
@@ -80,6 +83,7 @@ func (c *client) EnsureConsumer(ctx context.Context, in ConsumerInput) (Consumer
 			updateReq := pushConsumerUpdateConfig(in)
 			updated, _, err := c.api.PushConsumerAPI.UpdatePushConsumer(authCtx, cons.Id).JSPushConsumerUpdateRequest(updateReq).Execute()
 			if err != nil {
+				err = withAPIError(err)
 				return ConsumerResult{}, fmt.Errorf("update push consumer %q: %w", in.Spec.Name, err)
 			}
 			l.Info("push consumer updated", "resourceID", updated.Id, "consumerType", "push")
@@ -88,6 +92,7 @@ func (c *client) EnsureConsumer(ctx context.Context, in ConsumerInput) (Consumer
 		updateReq := pullConsumerUpdateConfig(in)
 		updated, _, err := c.api.PullConsumerAPI.UpdatePullConsumer(authCtx, cons.Id).JSPullConsumerUpdateRequest(updateReq).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			return ConsumerResult{}, fmt.Errorf("update pull consumer %q: %w", in.Spec.Name, err)
 		}
 		l.Info("pull consumer updated", "resourceID", updated.Id, "consumerType", "pull")
@@ -98,6 +103,7 @@ func (c *client) EnsureConsumer(ctx context.Context, in ConsumerInput) (Consumer
 		desired := pushConsumerConfig(in)
 		created, _, err := c.api.StreamAPI.CreatePushConsumer(authCtx, in.StreamID).JSPushConsumerConfigRequest(desired).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			return ConsumerResult{}, fmt.Errorf("create push consumer %q: %w", in.Spec.Name, err)
 		}
 		l.Info("push consumer created", "resourceID", created.Id, "consumerType", "push")
@@ -108,6 +114,7 @@ func (c *client) EnsureConsumer(ctx context.Context, in ConsumerInput) (Consumer
 
 	created, _, err := c.api.StreamAPI.CreatePullConsumer(authCtx, in.StreamID).JSPullConsumerConfigRequest(desired).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return ConsumerResult{}, fmt.Errorf("create pull consumer %q: %w", in.Spec.Name, err)
 	}
 	l.Info("pull consumer created", "resourceID", created.Id, "consumerType", "pull")
@@ -130,6 +137,7 @@ func (c *client) DeleteConsumer(ctx context.Context, in ConsumerInput) error {
 				l.Info("push consumer deleted", "resourceID", in.ConsumerID, "consumerType", "push")
 				return nil
 			}
+			err = withAPIError(err)
 			return fmt.Errorf("delete push consumer by id %q: %w", in.ConsumerID, err)
 		}
 		_, err := c.api.PullConsumerAPI.DeletePullConsumer(authCtx, in.ConsumerID).Execute()
@@ -137,6 +145,7 @@ func (c *client) DeleteConsumer(ctx context.Context, in ConsumerInput) error {
 			l.Info("pull consumer deleted", "resourceID", in.ConsumerID, "consumerType", "pull")
 			return nil
 		}
+		err = withAPIError(err)
 		return fmt.Errorf("delete pull consumer by id %q: %w", in.ConsumerID, err)
 	}
 
@@ -146,6 +155,7 @@ func (c *client) DeleteConsumer(ctx context.Context, in ConsumerInput) error {
 
 	list, _, err := c.api.StreamAPI.ListConsumers(authCtx, in.StreamID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		if isStatusCode(err, http.StatusNotFound) {
 			return nil
 		}
@@ -162,12 +172,14 @@ func (c *client) DeleteConsumer(ctx context.Context, in ConsumerInput) error {
 			l.Info("pull consumer deleted", "resourceID", cons.Id, "consumerType", "pull")
 			return nil
 		}
+		err = withAPIError(err)
 
 		_, err = c.api.PushConsumerAPI.DeletePushConsumer(authCtx, cons.Id).Execute()
 		if err == nil || isStatusCode(err, http.StatusNotFound) {
 			l.Info("push consumer deleted", "resourceID", cons.Id, "consumerType", "push")
 			return nil
 		}
+		err = withAPIError(err)
 		return fmt.Errorf("delete consumer %q: %w", in.Spec.Name, err)
 	}
 
@@ -182,6 +194,7 @@ func (c *client) ReadConsumerState(ctx context.Context, in ConsumerInput) ([]byt
 
 	list, _, err := c.api.StreamAPI.ListConsumers(authCtx, in.StreamID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		if isStatusCode(err, http.StatusNotFound) {
 			return nil, false, nil
 		}

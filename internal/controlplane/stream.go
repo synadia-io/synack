@@ -67,6 +67,7 @@ func (c *client) EnsureStream(ctx context.Context, in StreamInput) (StreamResult
 	if in.StreamID != "" {
 		updated, _, err := c.api.StreamAPI.UpdateStream(authCtx, in.StreamID).JSStreamConfigRequest(desired).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			if isStatusCode(err, http.StatusNotFound) {
 				l.Info("known stream ID not found, recreating by name", "resourceID", in.StreamID)
 				in.StreamID = ""
@@ -86,6 +87,7 @@ func (c *client) EnsureStream(ctx context.Context, in StreamInput) (StreamResult
 
 	list, _, err := c.api.AccountAPI.ListStreams(authCtx, accountID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return StreamResult{}, fmt.Errorf("list streams: %w", err)
 	}
 
@@ -96,6 +98,7 @@ func (c *client) EnsureStream(ctx context.Context, in StreamInput) (StreamResult
 
 		updated, _, err := c.api.StreamAPI.UpdateStream(authCtx, s.Id).JSStreamConfigRequest(desired).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			return StreamResult{}, fmt.Errorf("update stream %q: %w", in.Name, err)
 		}
 
@@ -106,6 +109,7 @@ func (c *client) EnsureStream(ctx context.Context, in StreamInput) (StreamResult
 
 	created, _, err := c.api.AccountAPI.CreateStream(authCtx, accountID).JSStreamConfigRequest(desired).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return StreamResult{}, fmt.Errorf("create stream %q: %w", in.Name, err)
 	}
 
@@ -128,6 +132,7 @@ func (c *client) DeleteStream(ctx context.Context, in StreamInput) error {
 			l.Info("stream deleted", "resourceID", in.StreamID)
 			return nil
 		}
+		err = withAPIError(err)
 		return fmt.Errorf("delete stream by stream id %q: %w", in.StreamID, err)
 	}
 
@@ -141,6 +146,7 @@ func (c *client) DeleteStream(ctx context.Context, in StreamInput) error {
 
 	list, _, err := c.api.AccountAPI.ListStreams(authCtx, accountID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return fmt.Errorf("list streams for delete: %w", err)
 	}
 
@@ -154,6 +160,7 @@ func (c *client) DeleteStream(ctx context.Context, in StreamInput) error {
 			l.Info("stream deleted", "resourceID", s.Id, "accountID", accountID)
 			return nil
 		}
+		err = withAPIError(err)
 
 		return fmt.Errorf("delete stream %q: %w", in.Name, err)
 	}
@@ -170,6 +177,7 @@ func (c *client) ReadStreamState(ctx context.Context, in StreamInput) ([]byte, b
 	if in.StreamID != "" {
 		info, _, err := c.api.StreamAPI.GetStreamInfo(authCtx, in.StreamID).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			if isStatusCode(err, http.StatusNotFound) {
 				return nil, false, nil
 			}
@@ -192,6 +200,7 @@ func (c *client) ReadStreamState(ctx context.Context, in StreamInput) ([]byte, b
 
 	list, _, err := c.api.AccountAPI.ListStreams(authCtx, accountID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return nil, false, fmt.Errorf("list streams: %w", err)
 	}
 

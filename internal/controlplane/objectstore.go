@@ -46,6 +46,7 @@ func (c *client) EnsureObjectStore(ctx context.Context, in ObjectStoreInput) (Ob
 		updateReq := inputToObjectStoreUpdateConfig(in)
 		updated, _, err := c.api.ObjectBucketAPI.UpdateObjectBucket(authCtx, in.ObjectStoreID).JSObjectBucketUpdateRequest(updateReq).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			if isStatusCode(err, http.StatusNotFound) {
 				l.Info("known object bucket ID not found, recreating by bucket name", "resourceID", in.ObjectStoreID)
 				in.ObjectStoreID = ""
@@ -65,6 +66,7 @@ func (c *client) EnsureObjectStore(ctx context.Context, in ObjectStoreInput) (Ob
 
 	list, _, err := c.api.AccountAPI.ListObjectBuckets(authCtx, accountID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return ObjectStoreResult{}, fmt.Errorf("list object buckets: %w", err)
 	}
 
@@ -75,6 +77,7 @@ func (c *client) EnsureObjectStore(ctx context.Context, in ObjectStoreInput) (Ob
 		updateReq := inputToObjectStoreUpdateConfig(in)
 		updated, _, err := c.api.ObjectBucketAPI.UpdateObjectBucket(authCtx, obj.Id).JSObjectBucketUpdateRequest(updateReq).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			return ObjectStoreResult{}, fmt.Errorf("update object bucket %q: %w", in.Bucket, err)
 		}
 		l.Info("object store updated", "resourceID", updated.Id, "accountID", accountID)
@@ -84,6 +87,7 @@ func (c *client) EnsureObjectStore(ctx context.Context, in ObjectStoreInput) (Ob
 	desired := inputToObjectStoreConfig(in)
 	created, _, err := c.api.AccountAPI.CreateObjectBucket(authCtx, accountID).JSObjectBucketConfig(desired).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return ObjectStoreResult{}, fmt.Errorf("create object bucket %q: %w", in.Bucket, err)
 	}
 	l.Info("object store created", "resourceID", created.Id, "accountID", accountID)
@@ -105,6 +109,7 @@ func (c *client) DeleteObjectStore(ctx context.Context, in ObjectStoreInput) err
 			l.Info("object store deleted", "resourceID", in.ObjectStoreID)
 			return nil
 		}
+		err = withAPIError(err)
 		return fmt.Errorf("delete object bucket by id %q: %w", in.ObjectStoreID, err)
 	}
 
@@ -118,6 +123,7 @@ func (c *client) DeleteObjectStore(ctx context.Context, in ObjectStoreInput) err
 
 	list, _, err := c.api.AccountAPI.ListObjectBuckets(authCtx, accountID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return fmt.Errorf("list object buckets for delete: %w", err)
 	}
 
@@ -130,6 +136,7 @@ func (c *client) DeleteObjectStore(ctx context.Context, in ObjectStoreInput) err
 			l.Info("object store deleted", "resourceID", obj.Id, "accountID", accountID)
 			return nil
 		}
+		err = withAPIError(err)
 		return fmt.Errorf("delete object bucket %q: %w", in.Bucket, err)
 	}
 
@@ -145,6 +152,7 @@ func (c *client) ReadObjectStoreState(ctx context.Context, in ObjectStoreInput) 
 	if in.ObjectStoreID != "" {
 		obj, _, err := c.api.ObjectBucketAPI.GetObjectBucket(authCtx, in.ObjectStoreID).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			if isStatusCode(err, http.StatusNotFound) {
 				return nil, false, nil
 			}
@@ -167,6 +175,7 @@ func (c *client) ReadObjectStoreState(ctx context.Context, in ObjectStoreInput) 
 
 	list, _, err := c.api.AccountAPI.ListObjectBuckets(authCtx, accountID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return nil, false, fmt.Errorf("list object buckets: %w", err)
 	}
 

@@ -50,19 +50,27 @@ func (c *client) EnsureNatsUser(ctx context.Context, in NatsUserInput) (NatsUser
 
 		updated, _, err := c.api.NatsUserAPI.UpdateNatsUser(authCtx, in.NatsUserID).NatsUserUpdateRequest(updateReq).Execute()
 		if err != nil {
-			return NatsUserResult{}, fmt.Errorf("update nats user by id %q: %w", in.NatsUserID, err)
+			err = withAPIError(err)
+			if isStatusCode(err, http.StatusNotFound) {
+				l.Info("known nats user ID not found, recreating by name", "resourceID", in.NatsUserID)
+				in.NatsUserID = ""
+			} else {
+				return NatsUserResult{}, fmt.Errorf("update nats user by id %q: %w", in.NatsUserID, err)
+			}
+		} else {
+			l.Info("nats user updated", "resourceID", updated.Id, "accountID", accountID)
+			return NatsUserResult{
+				NatsUserID:    updated.Id,
+				AccountID:     accountID,
+				UserPublicKey: updated.UserPublicKey,
+			}, nil
 		}
-		l.Info("nats user updated", "resourceID", updated.Id, "accountID", accountID)
-		return NatsUserResult{
-			NatsUserID:    updated.Id,
-			AccountID:     accountID,
-			UserPublicKey: updated.UserPublicKey,
-		}, nil
 	}
 
 	// List and match by name
 	list, _, err := c.api.AccountAPI.ListUsers(authCtx, accountID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return NatsUserResult{}, fmt.Errorf("list nats users: %w", err)
 	}
 
@@ -77,6 +85,7 @@ func (c *client) EnsureNatsUser(ctx context.Context, in NatsUserInput) (NatsUser
 
 			updated, _, err := c.api.NatsUserAPI.UpdateNatsUser(authCtx, u.Id).NatsUserUpdateRequest(updateReq).Execute()
 			if err != nil {
+				err = withAPIError(err)
 				return NatsUserResult{}, fmt.Errorf("update nats user %q: %w", u.Id, err)
 			}
 
@@ -110,6 +119,7 @@ func (c *client) EnsureNatsUser(ctx context.Context, in NatsUserInput) (NatsUser
 
 	created, _, err := c.api.AccountAPI.CreateUser(authCtx, accountID).NatsUserCreateRequest(createReq).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return NatsUserResult{}, fmt.Errorf("create nats user %q: %w", in.Name, err)
 	}
 
@@ -138,6 +148,7 @@ func (c *client) DeleteNatsUser(ctx context.Context, in NatsUserInput) error {
 
 		list, _, err := c.api.AccountAPI.ListUsers(authCtx, accountID).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			return fmt.Errorf("list nats users for delete: %w", err)
 		}
 
@@ -164,6 +175,7 @@ func (c *client) DeleteNatsUser(ctx context.Context, in NatsUserInput) error {
 		l.Info("nats user deleted", "resourceID", userID)
 		return nil
 	}
+	err = withAPIError(err)
 
 	return fmt.Errorf("delete nats user %q: %w", userID, err)
 }
@@ -177,6 +189,7 @@ func (c *client) ReadNatsUserState(ctx context.Context, in NatsUserInput) ([]byt
 	if in.NatsUserID != "" {
 		user, _, err := c.api.NatsUserAPI.GetNatsUser(authCtx, in.NatsUserID).Execute()
 		if err != nil {
+			err = withAPIError(err)
 			if isStatusCode(err, http.StatusNotFound) {
 				return nil, false, nil
 			}
@@ -196,6 +209,7 @@ func (c *client) ReadNatsUserState(ctx context.Context, in NatsUserInput) ([]byt
 
 	list, _, err := c.api.AccountAPI.ListUsers(authCtx, accountID).Execute()
 	if err != nil {
+		err = withAPIError(err)
 		return nil, false, fmt.Errorf("list nats users: %w", err)
 	}
 
@@ -211,4 +225,19 @@ func (c *client) ReadNatsUserState(ctx context.Context, in NatsUserInput) ([]byt
 	}
 
 	return nil, false, nil
+}
+
+func (c *client) DownloadNatsUserCreds(ctx context.Context, natsUserID string) (string, error) {
+	authCtx, err := c.authContext(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	creds, _, err := c.api.NatsUserAPI.DownloadNatsUserCreds(authCtx, natsUserID).Execute()
+	if err != nil {
+		err = withAPIError(err)
+		return "", fmt.Errorf("download nats user creds %q: %w", natsUserID, err)
+	}
+
+	return creds, nil
 }
