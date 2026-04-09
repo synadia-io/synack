@@ -1,0 +1,13 @@
+apiVersion: synack.synadia.io/v1alpha1
+kind: NatsUser
+metadata:
+  name: example-user
+  namespace: default
+spec:
+  accountRef:
+    name: example-account
+  name: my-user
+  signingKeyGroupId: "sk-group-id"
+  credentialsSecret:
+    name: my-user-creds
+    key: creds

@@ -1,0 +1,14 @@
+apiVersion: synack.synadia.io/v1alpha1
+kind: Consumer
+metadata:
+  name: orders-notifier
+  namespace: default
+spec:
+  streamRef:
+    name: orders
+  name: ORDERS_NOTIFIER
+  ackPolicy: explicit
+  deliverPolicy: new
+  deliverSubject: notify.orders
+  deliverGroup: notifiers
+  maxDeliver: 3

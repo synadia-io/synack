@@ -1,0 +1,9 @@
+apiVersion: synack.synadia.io/v1alpha1
+kind: ObjectStore
+metadata:
+  name: app-assets
+  namespace: default
+spec:
+  accountId: ACCOUNT_ID_HERE
+  bucket: APP_ASSETS
+  storage: file

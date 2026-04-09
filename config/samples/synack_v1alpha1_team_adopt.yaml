@@ -1,0 +1,8 @@
+apiVersion: synack.synadia.io/v1alpha1
+kind: Team
+metadata:
+  name: adopted-team
+  namespace: default
+spec:
+  teamId: "existing-team-id"
+  name: "Adopted Team"

@@ -1,0 +1,13 @@
+apiVersion: synack.synadia.io/v1alpha1
+kind: Consumer
+metadata:
+  name: orders-processor
+  namespace: default
+spec:
+  streamRef:
+    name: orders
+  name: ORDERS_PROCESSOR
+  ackPolicy: explicit
+  deliverPolicy: all
+  maxDeliver: 5
+  maxAckPending: 1000

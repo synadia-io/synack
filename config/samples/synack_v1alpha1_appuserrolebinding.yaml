@@ -1,0 +1,12 @@
+apiVersion: synack.synadia.io/v1alpha1
+kind: AppUserRoleBinding
+metadata:
+  name: bot-account-access
+  namespace: default
+spec:
+  subjectRef:
+    name: bot
+  scope: Account
+  targetRef:
+    name: my-account
+  roleId: "role_viewer"

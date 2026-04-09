@@ -1,8 +1,7 @@
 apiVersion: synack.synadia.io/v1alpha1
-kind: Account
+kind: Team
 metadata:
-  name: app-team
+  name: example-team
   namespace: default
 spec:
-  systemId: SYSTEM_ID
-  name: app-team
+  name: "My Team"

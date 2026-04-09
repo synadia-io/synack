@@ -1,0 +1,10 @@
+apiVersion: synack.synadia.io/v1alpha1
+kind: AppUserRoleBinding
+metadata:
+  name: human-system-access
+  namespace: default
+spec:
+  teamAppUserId: "tau_abc123"
+  scope: System
+  targetId: "sys_xyz789"
+  roleId: "role_admin"

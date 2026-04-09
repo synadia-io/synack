@@ -1,0 +1,10 @@
+apiVersion: synack.synadia.io/v1alpha1
+kind: KeyValue
+metadata:
+  name: app-config
+  namespace: default
+spec:
+  accountId: ACCOUNT_ID_HERE
+  bucket: APP_CONFIG
+  history: 5
+  storage: file

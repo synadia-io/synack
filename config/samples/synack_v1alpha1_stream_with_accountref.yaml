@@ -1,0 +1,20 @@
+apiVersion: synack.synadia.io/v1alpha1
+kind: Account
+metadata:
+  name: app-team
+  namespace: default
+spec:
+  systemId: SYSTEM_ID_HERE
+  name: app-team
+---
+apiVersion: synack.synadia.io/v1alpha1
+kind: Stream
+metadata:
+  name: orders-for-app-team
+  namespace: default
+spec:
+  accountRef:
+    name: app-team
+  name: ORDERS
+  subjects:
+    - orders.>
