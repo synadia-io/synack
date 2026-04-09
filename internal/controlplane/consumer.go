@@ -334,6 +334,7 @@ func pushConsumerConfig(in ConsumerInput) syncp.JSPushConsumerConfigRequest {
 	cfg := syncp.JSPushConsumerConfigRequest{
 		JSCommonConsumerConfigRequest: syncp.JSCommonConsumerConfigRequest{
 			Name:          &name,
+			DurableName:   &name,
 			Description:   &description,
 			AckPolicy:     ackPolicy,
 			DeliverPolicy: deliverPolicy,
