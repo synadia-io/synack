@@ -180,6 +180,10 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		serverState, found, err := r.ControlPlane.ReadKeyValueState(ctx, in)
 		if err != nil {
 			l.Error(err, "failed to read keyvalue server state")
+			kv.Status.Message = err.Error()
+			if statusErr := r.Status().Update(ctx, &kv); statusErr != nil {
+				l.Error(statusErr, "failed to update keyvalue status")
+			}
 			return requeueReconcileErr, nil
 		}
 

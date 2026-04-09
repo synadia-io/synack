@@ -1,13 +1,14 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/go-logr/logr"
-	"github.com/google/go-cmp/cmp"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,16 +38,21 @@ func diffState(appliedState, desiredState []byte) (string, error) {
 		return "", nil
 	}
 
-	var applied, desired any
-
-	if err := json.Unmarshal(appliedState, &applied); err != nil {
-		return "", err
-	}
-	if err := json.Unmarshal(desiredState, &desired); err != nil {
+	patch, err := jsonpatch.CreateMergePatch(appliedState, desiredState)
+	if err != nil {
 		return "", err
 	}
 
-	return cmp.Diff(applied, desired), nil
+	compactPatch := &bytes.Buffer{}
+	if err := json.Compact(compactPatch, patch); err != nil {
+		return "", err
+	}
+
+	if compactPatch.String() == "{}" {
+		return "", nil
+	}
+
+	return compactPatch.String(), nil
 
 }
 
@@ -55,7 +61,14 @@ func logStateDiff(log logr.Logger, resource string, diff string) {
 		return
 	}
 
-	log.Info(resource + " desired state changed\n" + diff)
+	var diffObject any
+	if err := json.Unmarshal([]byte(diff), &diffObject); err == nil {
+		log.Info(resource+" desired state changed", "mergePatch", diffObject)
+		return
+	}
+
+	// Fallback for non-JSON diffs so we still emit something useful.
+	log.Info(resource+" desired state changed", "diff", diff)
 }
 
 func loadAnnotation(obj client.Object, key string) []byte {

@@ -176,6 +176,10 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		serverState, found, err := r.ControlPlane.ReadObjectStoreState(ctx, in)
 		if err != nil {
 			l.Error(err, "failed to read object store server state")
+			obj.Status.Message = err.Error()
+			if statusErr := r.Status().Update(ctx, &obj); statusErr != nil {
+				l.Error(statusErr, "failed to update object store status")
+			}
 			return requeueReconcileErr, nil
 		}
 

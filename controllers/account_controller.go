@@ -140,6 +140,10 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		serverState, found, err := r.ControlPlane.ReadAccountState(ctx, in)
 		if err != nil {
 			l.Error(err, "failed to read account server state")
+			account.Status.Message = err.Error()
+			if statusErr := r.Status().Update(ctx, &account); statusErr != nil {
+				l.Error(statusErr, "failed to update account status")
+			}
 			return requeueReconcileErr, nil
 		}
 
@@ -151,6 +155,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			} else if diff == "" {
 				return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 			} else {
+				logStateDiff(l, "account", diff)
 				l.Info("server-side drift detected for account. Reverting...\n" + diff)
 			}
 		} else if !found {

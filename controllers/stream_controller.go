@@ -215,6 +215,10 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		serverState, found, err := r.ControlPlane.ReadStreamState(ctx, in)
 		if err != nil {
 			l.Error(err, "failed to read stream server state")
+			stream.Status.Message = err.Error()
+			if statusErr := r.Status().Update(ctx, &stream); statusErr != nil {
+				l.Error(statusErr, "failed to update stream status")
+			}
 			return requeueReconcileErr, nil
 		}
 

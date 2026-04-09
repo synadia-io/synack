@@ -241,3 +241,28 @@ func (c *client) DownloadNatsUserCreds(ctx context.Context, natsUserID string) (
 
 	return creds, nil
 }
+
+func (c *client) ResolveSigningKeyGroupID(ctx context.Context, accountID, skGroupID string) (string, error) {
+	if skGroupID != "" && !strings.EqualFold(skGroupID, "default") {
+		return skGroupID, nil
+	}
+
+	authCtx, err := c.authContext(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	list, _, err := c.api.AccountAPI.ListAccountSkGroup(authCtx, accountID).Execute()
+	if err != nil {
+		err = withAPIError(err)
+		return "", fmt.Errorf("list signing key groups for account %q: %w", accountID, err)
+	}
+
+	for _, skg := range list.Items {
+		if strings.EqualFold(skg.Name, "Default") {
+			return skg.Id, nil
+		}
+	}
+
+	return "", fmt.Errorf("no default signing key group found for account %q", accountID)
+}

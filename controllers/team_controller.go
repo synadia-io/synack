@@ -127,6 +127,10 @@ func (r *TeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		serverState, found, err := r.ControlPlane.ReadTeamState(ctx, in)
 		if err != nil {
 			l.Error(err, "failed to read team server state")
+			team.Status.Message = err.Error()
+			if statusErr := r.Status().Update(ctx, &team); statusErr != nil {
+				l.Error(statusErr, "failed to update team status")
+			}
 			return requeueReconcileErr, nil
 		}
 

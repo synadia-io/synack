@@ -172,6 +172,10 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 		serverState, found, err := r.ControlPlane.ReadTeamServiceAccountState(ctx, in)
 		if err != nil {
 			l.Error(err, "failed to read team service account server state")
+			tsa.Status.Message = err.Error()
+			if statusErr := r.Status().Update(ctx, &tsa); statusErr != nil {
+				l.Error(statusErr, "failed to update team service account status")
+			}
 			return requeueReconcileErr, nil
 		}
 
@@ -202,6 +206,7 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	desiredStatus := tsa.Status
 	desiredStatus.ID = out.ServiceAccountID
+	desiredStatus.TeamAppUserID = out.TeamAppUserID
 	desiredStatus.TeamID = teamID
 	desiredStatus.Message = messageApplied
 

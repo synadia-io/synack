@@ -173,6 +173,10 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		serverState, found, err := r.ControlPlane.ReadConsumerState(ctx, in)
 		if err != nil {
 			l.Error(err, "failed to read consumer server state")
+			consumer.Status.Message = err.Error()
+			if statusErr := r.Status().Update(ctx, &consumer); statusErr != nil {
+				l.Error(statusErr, "failed to update consumer status")
+			}
 			return requeueReconcileErr, nil
 		}
 

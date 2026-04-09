@@ -44,6 +44,7 @@ type Client interface {
 	DeleteConsumer(ctx context.Context, in ConsumerInput) error
 	ReadConsumerState(ctx context.Context, in ConsumerInput) ([]byte, bool, error)
 
+	ResolveSigningKeyGroupID(ctx context.Context, accountID, skGroupID string) (string, error)
 	EnsureNatsUser(ctx context.Context, in NatsUserInput) (NatsUserResult, error)
 	DeleteNatsUser(ctx context.Context, in NatsUserInput) error
 	ReadNatsUserState(ctx context.Context, in NatsUserInput) ([]byte, bool, error)

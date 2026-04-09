@@ -143,6 +143,16 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return requeueReconcileErr, nil
 	}
 
+	skGroupID, err := r.ControlPlane.ResolveSigningKeyGroupID(ctx, accountID, natsUser.Spec.SigningKeyGroupID)
+	if err != nil {
+		l.Error(err, "failed to resolve signing key group ID")
+		natsUser.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &natsUser); err != nil {
+			l.Error(err, "failed to update nats user status")
+		}
+		return requeueReconcileErr, nil
+	}
+
 	in := controlplane.NatsUserInput{
 		AccountSelectors: controlplane.AccountSelectors{
 			AccountID:         accountID,
@@ -151,7 +161,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		},
 		NatsUserID:        knownUserID,
 		Name:              natsUser.Spec.Name,
-		SigningKeyGroupID: natsUser.Spec.SigningKeyGroupID,
+		SigningKeyGroupID: skGroupID,
 		Spec:              natsUser.Spec,
 	}
 
@@ -182,6 +192,10 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		serverState, found, err := r.ControlPlane.ReadNatsUserState(ctx, in)
 		if err != nil {
 			l.Error(err, "failed to read nats user server state")
+			natsUser.Status.Message = err.Error()
+			if statusErr := r.Status().Update(ctx, &natsUser); statusErr != nil {
+				l.Error(statusErr, "failed to update nats user status")
+			}
 			return requeueReconcileErr, nil
 		}
 
