@@ -10,7 +10,7 @@ manifests:
 	$(CONTROLLER_GEN) crd paths="./api/..." output:crd:artifacts:config=config/crd/bases
 
 fmt:
-	$(GO) fmt ./...
+	$(GO) run mvdan.cc/gofumpt@latest -w .
 
 vet:
 	$(GO) vet ./...

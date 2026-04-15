@@ -33,10 +33,12 @@ type NatsUserReconciler struct {
 	RequeueInterval time.Duration
 }
 
-const natsUserFinalizer = "synack.synadia.io/natsuser-finalizer"
-const defaultNatsUserCredsKey = "creds"
-const natsUserSecretUIDAnnotation = "synack.synadia.io/natsuser-uid"
-const natsUserSecretOwnerLabel = "synack.synadia.io/natsuser"
+const (
+	natsUserFinalizer           = "synack.synadia.io/natsuser-finalizer"
+	defaultNatsUserCredsKey     = "creds"
+	natsUserSecretUIDAnnotation = "synack.synadia.io/natsuser-uid"
+	natsUserSecretOwnerLabel    = "synack.synadia.io/natsuser"
+)
 
 // +kubebuilder:rbac:groups=synack.synadia.io,resources=natsusers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=synack.synadia.io,resources=natsusers/status,verbs=get;update;patch

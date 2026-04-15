@@ -1,0 +1,31 @@
+version: 2
+
+builds:
+  - id: synack
+    binary: synack
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+dockers_v2:
+  - ids:
+      - synack
+    images:
+      - "{{ .Env.ECR_REGISTRY }}/synack"
+    tags:
+      - "{{ .Tag }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+
+archives:
+  - formats:
+      - tar.gz
+
+changelog:
+  sort: asc

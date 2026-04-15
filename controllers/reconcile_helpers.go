@@ -53,7 +53,6 @@ func diffState(appliedState, desiredState []byte) (string, error) {
 	}
 
 	return compactPatch.String(), nil
-
 }
 
 func logStateDiff(log logr.Logger, resource string, diff string) {
