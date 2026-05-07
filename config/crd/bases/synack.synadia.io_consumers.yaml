@@ -149,6 +149,7 @@ spec:
                 description: OptStartSeq sets the start sequence for by_start_sequence
                   delivery.
                 format: int64
+                minimum: 0
                 type: integer
               optStartTime:
                 description: OptStartTime is an RFC3339 timestamp for by_start_time

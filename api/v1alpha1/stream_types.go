@@ -106,8 +106,9 @@ type SubjectTransform struct {
 
 // StreamSource defines a source stream configuration.
 type StreamSource struct {
-	Name          string `json:"name"`
-	OptStartSeq   int    `json:"optStartSeq,omitempty"`
+	Name string `json:"name"`
+	// +kubebuilder:validation:Minimum=0
+	OptStartSeq   uint64 `json:"optStartSeq,omitempty"`
 	OptStartTime  string `json:"optStartTime,omitempty"`
 	FilterSubject string `json:"filterSubject,omitempty"`
 

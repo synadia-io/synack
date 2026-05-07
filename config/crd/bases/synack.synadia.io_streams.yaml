@@ -190,6 +190,8 @@ spec:
                     name:
                       type: string
                     optStartSeq:
+                      format: int64
+                      minimum: 0
                       type: integer
                     optStartTime:
                       type: string

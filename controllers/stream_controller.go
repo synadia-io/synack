@@ -396,8 +396,7 @@ func toSCPStreamSources(in []natsv1.StreamSource) []syncp.StreamSource {
 		}
 
 		if src.OptStartSeq > 0 {
-			optStartSeq := uint64(src.OptStartSeq)
-			cpSource.OptStartSeq = &optStartSeq
+			cpSource.OptStartSeq = &src.OptStartSeq
 		}
 
 		if src.OptStartTime != "" {

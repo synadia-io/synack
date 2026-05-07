@@ -60,6 +60,7 @@ type ConsumerSpec struct {
 	Replicas int `json:"replicas,omitempty"`
 
 	// OptStartSeq sets the start sequence for by_start_sequence delivery.
+	// +kubebuilder:validation:Minimum=0
 	OptStartSeq uint64 `json:"optStartSeq,omitempty"`
 
 	// OptStartTime is an RFC3339 timestamp for by_start_time delivery.
