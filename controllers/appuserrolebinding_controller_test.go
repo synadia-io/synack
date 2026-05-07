@@ -412,8 +412,8 @@ func TestAppUserRoleBindingTargetRefUnsupportedForSystemScope(t *testing.T) {
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: binding.Name, Namespace: binding.Namespace},
 	})
-	if err != nil {
-		t.Fatalf("reconcile: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "targetRef is not supported for scope System") {
+		t.Fatalf("expected unsupported scope error, got %v", err)
 	}
 	if fcp.ensureAppUserRoleBindingHit != 0 {
 		t.Fatalf("expected no ensure call, got %d", fcp.ensureAppUserRoleBindingHit)

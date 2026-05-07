@@ -92,7 +92,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				if err := r.Status().Update(ctx, &natsUser); err != nil {
 					l.Error(err, "failed to update nats user status")
 				}
-				return requeueReconcileErr, nil
+				return ctrl.Result{}, err
 			}
 
 			if ok := controllerutil.RemoveFinalizer(&natsUser, natsUserFinalizer); !ok {
@@ -142,7 +142,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &natsUser); err != nil {
 			l.Error(err, "failed to update nats user status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	skGroupID, err := r.ControlPlane.ResolveSigningKeyGroupID(ctx, accountID, natsUser.Spec.SigningKeyGroupID)
@@ -152,7 +152,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &natsUser); err != nil {
 			l.Error(err, "failed to update nats user status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	in := controlplane.NatsUserInput{
@@ -174,7 +174,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &natsUser); err != nil {
 			l.Error(err, "failed to update nats user status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	specChanged := false
@@ -184,7 +184,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &natsUser); err != nil {
 			l.Error(err, "failed to update nats user status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	} else if diff != "" {
 		logStateDiff(l, "natsUser", diff)
 		specChanged = true
@@ -198,7 +198,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			if statusErr := r.Status().Update(ctx, &natsUser); statusErr != nil {
 				l.Error(statusErr, "failed to update nats user status")
 			}
-			return requeueReconcileErr, nil
+			return ctrl.Result{}, err
 		}
 
 		lastServerState := loadAnnotation(&natsUser, serverStateAnnotation)
@@ -223,7 +223,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &natsUser); err != nil {
 			l.Error(err, "failed to update nats user status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	desiredStatus := natsUser.Status
@@ -242,7 +242,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			if err := r.Status().Update(ctx, &natsUser); err != nil {
 				l.Error(err, "failed to update nats user status")
 			}
-			return requeueReconcileErr, nil
+			return ctrl.Result{}, err
 		}
 
 		updated, err := r.reconcileCredentialsSecret(ctx, &natsUser, creds, key)
@@ -252,7 +252,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			if err := r.Status().Update(ctx, &natsUser); err != nil {
 				l.Error(err, "failed to update nats user status")
 			}
-			return requeueReconcileErr, nil
+			return ctrl.Result{}, err
 		}
 
 		desiredStatus.CredentialsSecretName = secretName
@@ -270,7 +270,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &natsUser); err != nil {
 			l.Error(err, "failed to update nats user status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	if desiredStatus != natsUser.Status {
@@ -288,7 +288,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &natsUser); err != nil {
 			l.Error(err, "failed to update nats user status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	newServerState, _, err := r.ControlPlane.ReadNatsUserState(ctx, in)
@@ -298,7 +298,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if statusErr := r.Status().Update(ctx, &natsUser); statusErr != nil {
 			l.Error(statusErr, "failed to update nats user status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	annotationsChanged := setAnnotations(&natsUser, appliedStateAnnotation, desiredState)

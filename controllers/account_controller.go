@@ -80,7 +80,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				if err := r.Status().Update(ctx, &account); err != nil {
 					l.Error(err, "failed to update account status")
 				}
-				return requeueReconcileErr, nil
+				return ctrl.Result{}, err
 			}
 
 			if ok := controllerutil.RemoveFinalizer(&account, accountFinalizer); !ok {
@@ -120,7 +120,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if err := r.Status().Update(ctx, &account); err != nil {
 			l.Error(err, "failed to update account status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	specChanged := false
@@ -130,7 +130,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if err := r.Status().Update(ctx, &account); err != nil {
 			l.Error(err, "failed to update account status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	} else if diff != "" {
 		logStateDiff(l, "account", diff)
 		specChanged = true
@@ -144,7 +144,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			if statusErr := r.Status().Update(ctx, &account); statusErr != nil {
 				l.Error(statusErr, "failed to update account status")
 			}
-			return requeueReconcileErr, nil
+			return ctrl.Result{}, err
 		}
 
 		lastServerState := loadAnnotation(&account, serverStateAnnotation)
@@ -170,7 +170,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if err := r.Status().Update(ctx, &account); err != nil {
 			l.Error(err, "failed to update account status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	desiredStatus := account.Status
@@ -192,7 +192,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if err := r.Status().Update(ctx, &account); err != nil {
 			l.Error(err, "failed to update account status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	newServerState, _, err := r.ControlPlane.ReadAccountState(ctx, in)
@@ -202,7 +202,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if statusErr := r.Status().Update(ctx, &account); statusErr != nil {
 			l.Error(statusErr, "failed to update account status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	annotationsChanged := setAnnotations(&account, appliedStateAnnotation, desiredState)

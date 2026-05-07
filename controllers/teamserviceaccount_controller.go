@@ -87,7 +87,7 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 				if err := r.Status().Update(ctx, &tsa); err != nil {
 					l.Error(err, "failed to update team service account status")
 				}
-				return requeueReconcileErr, nil
+				return ctrl.Result{}, err
 			}
 
 			if ok := controllerutil.RemoveFinalizer(&tsa, teamServiceAccountFinalizer); !ok {
@@ -144,7 +144,7 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if err := r.Status().Update(ctx, &tsa); err != nil {
 			l.Error(err, "failed to update team service account status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	in := controlplane.TeamServiceAccountInput{
@@ -161,7 +161,7 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if err := r.Status().Update(ctx, &tsa); err != nil {
 			l.Error(err, "failed to update team service account status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	specChanged := false
@@ -171,7 +171,7 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if err := r.Status().Update(ctx, &tsa); err != nil {
 			l.Error(err, "failed to update team service account status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	} else if diff != "" {
 		logStateDiff(l, "teamServiceAccount", diff)
 		specChanged = true
@@ -185,7 +185,7 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if statusErr := r.Status().Update(ctx, &tsa); statusErr != nil {
 				l.Error(statusErr, "failed to update team service account status")
 			}
-			return requeueReconcileErr, nil
+			return ctrl.Result{}, err
 		}
 
 		lastServerState := loadAnnotation(&tsa, serverStateAnnotation)
@@ -210,7 +210,7 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if err := r.Status().Update(ctx, &tsa); err != nil {
 			l.Error(err, "failed to update team service account status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	desiredStatus := tsa.Status
@@ -234,7 +234,7 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if err := r.Status().Update(ctx, &tsa); err != nil {
 			l.Error(err, "failed to update team service account status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	newServerState, _, err := r.ControlPlane.ReadTeamServiceAccountState(ctx, in)
@@ -244,7 +244,7 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if statusErr := r.Status().Update(ctx, &tsa); statusErr != nil {
 			l.Error(statusErr, "failed to update team service account status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	annotationsChanged := setAnnotations(&tsa, appliedStateAnnotation, desiredState)

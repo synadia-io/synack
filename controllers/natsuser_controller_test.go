@@ -218,8 +218,8 @@ func TestNatsUserReconcileRefusesUnownedCredentialsSecret(t *testing.T) {
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: user.Name, Namespace: user.Namespace},
 	})
-	if err != nil {
-		t.Fatalf("reconcile: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "already exists and is not owned") {
+		t.Fatalf("expected ownership error, got %v", err)
 	}
 
 	var unchanged corev1.Secret
@@ -274,8 +274,8 @@ func TestNatsUserReconcileSetsStatusMessageWhenCredsDownloadFails(t *testing.T) 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: user.Name, Namespace: user.Namespace},
 	})
-	if err != nil {
-		t.Fatalf("reconcile: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "credential download failed") {
+		t.Fatalf("expected credentials error, got %v", err)
 	}
 
 	var got natsv1.NatsUser

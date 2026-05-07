@@ -23,7 +23,6 @@ import (
 
 var (
 	requeueWaitingForResource = ctrl.Result{RequeueAfter: 5 * time.Second}
-	requeueReconcileErr       = ctrl.Result{RequeueAfter: 15 * time.Second}
 
 	errWaitingForStream = fmt.Errorf("waiting for referenced Stream to be ready")
 )
@@ -87,7 +86,7 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				if err := r.Status().Update(ctx, &consumer); err != nil {
 					l.Error(err, "failed to update consumer status")
 				}
-				return requeueReconcileErr, nil
+				return ctrl.Result{}, err
 			}
 
 			if ok := controllerutil.RemoveFinalizer(&consumer, consumerFinalizer); !ok {
@@ -137,7 +136,7 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &consumer); err != nil {
 			l.Error(err, "failed to update consumer status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	in := controlplane.ConsumerInput{
@@ -153,7 +152,7 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &consumer); err != nil {
 			l.Error(err, "failed to update consumer status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	specChanged := false
@@ -163,7 +162,7 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &consumer); err != nil {
 			l.Error(err, "failed to update consumer status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	} else if diff != "" {
 		logStateDiff(l, "consumer", diff)
 		specChanged = true
@@ -177,7 +176,7 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			if statusErr := r.Status().Update(ctx, &consumer); statusErr != nil {
 				l.Error(statusErr, "failed to update consumer status")
 			}
-			return requeueReconcileErr, nil
+			return ctrl.Result{}, err
 		}
 
 		lastServerState := loadAnnotation(&consumer, serverStateAnnotation)
@@ -202,7 +201,7 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &consumer); err != nil {
 			l.Error(err, "failed to update consumer status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	desiredStatus := consumer.Status
@@ -226,7 +225,7 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &consumer); err != nil {
 			l.Error(err, "failed to update consumer status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	newServerState, _, err := r.ControlPlane.ReadConsumerState(ctx, in)
@@ -236,7 +235,7 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if statusErr := r.Status().Update(ctx, &consumer); statusErr != nil {
 			l.Error(statusErr, "failed to update consumer status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	annotationsChanged := setAnnotations(&consumer, appliedStateAnnotation, desiredState)

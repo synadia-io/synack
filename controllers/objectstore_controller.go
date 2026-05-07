@@ -78,7 +78,7 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				if err := r.Status().Update(ctx, &obj); err != nil {
 					l.Error(err, "failed to update objectstore status")
 				}
-				return requeueReconcileErr, nil
+				return ctrl.Result{}, err
 			}
 
 			if ok := controllerutil.RemoveFinalizer(&obj, objectStoreFinalizer); !ok {
@@ -128,7 +128,7 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Status().Update(ctx, &obj); err != nil {
 			l.Error(err, "failed to update object store status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	in := controlplane.ObjectStoreInput{
@@ -156,7 +156,7 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Status().Update(ctx, &obj); err != nil {
 			l.Error(err, "failed to update object store status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	specChanged := false
@@ -166,7 +166,7 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Status().Update(ctx, &obj); err != nil {
 			l.Error(err, "failed to update object store status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	} else if diff != "" {
 		logStateDiff(l, "object store", diff)
 		specChanged = true
@@ -180,7 +180,7 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			if statusErr := r.Status().Update(ctx, &obj); statusErr != nil {
 				l.Error(statusErr, "failed to update object store status")
 			}
-			return requeueReconcileErr, nil
+			return ctrl.Result{}, err
 		}
 
 		lastServerState := loadAnnotation(&obj, serverStateAnnotation)
@@ -205,7 +205,7 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Status().Update(ctx, &obj); err != nil {
 			l.Error(err, "failed to update object store status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	desiredStatus := obj.Status
@@ -227,7 +227,7 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Status().Update(ctx, &obj); err != nil {
 			l.Error(err, "failed to update object store status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	newServerState, _, err := r.ControlPlane.ReadObjectStoreState(ctx, in)
@@ -237,7 +237,7 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if statusErr := r.Status().Update(ctx, &obj); statusErr != nil {
 			l.Error(statusErr, "failed to update object store status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	annotationsChanged := setAnnotations(&obj, appliedStateAnnotation, desiredState)

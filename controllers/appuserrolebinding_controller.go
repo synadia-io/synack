@@ -81,7 +81,7 @@ func (r *AppUserRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.R
 				if err := r.Status().Update(ctx, &binding); err != nil {
 					l.Error(err, "failed to update binding status")
 				}
-				return requeueReconcileErr, nil
+				return ctrl.Result{}, err
 			}
 
 			if ok := controllerutil.RemoveFinalizer(&binding, appUserRoleBindingFinalizer); !ok {
@@ -153,7 +153,7 @@ func (r *AppUserRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if err := r.Status().Update(ctx, &binding); err != nil {
 			l.Error(err, "failed to update binding status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	// Resolve target.
@@ -171,7 +171,7 @@ func (r *AppUserRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if err := r.Status().Update(ctx, &binding); err != nil {
 			l.Error(err, "failed to update binding status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	in := controlplane.AppUserRoleBindingInput{
@@ -188,7 +188,7 @@ func (r *AppUserRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if err := r.Status().Update(ctx, &binding); err != nil {
 			l.Error(err, "failed to update binding status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	specChanged := false
@@ -198,7 +198,7 @@ func (r *AppUserRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if err := r.Status().Update(ctx, &binding); err != nil {
 			l.Error(err, "failed to update binding status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	} else if diff != "" {
 		logStateDiff(l, "appUserRoleBinding", diff)
 		specChanged = true
@@ -208,7 +208,7 @@ func (r *AppUserRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.R
 		serverState, found, err := r.ControlPlane.ReadAppUserRoleBindingState(ctx, in)
 		if err != nil {
 			l.Error(err, "failed to read binding server state")
-			return requeueReconcileErr, nil
+			return ctrl.Result{}, err
 		}
 
 		lastServerState := loadAnnotation(&binding, serverStateAnnotation)
@@ -233,7 +233,7 @@ func (r *AppUserRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if err := r.Status().Update(ctx, &binding); err != nil {
 			l.Error(err, "failed to update binding status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	desiredStatus := binding.Status
@@ -258,7 +258,7 @@ func (r *AppUserRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if statusErr := r.Status().Update(ctx, &binding); statusErr != nil {
 			l.Error(statusErr, "failed to update binding status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	annotationsChanged := setAnnotations(&binding, appliedStateAnnotation, desiredState)

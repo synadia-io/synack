@@ -78,7 +78,7 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				if err := r.Status().Update(ctx, &kv); err != nil {
 					l.Error(err, "failed to update keyvalue status")
 				}
-				return requeueReconcileErr, nil
+				return ctrl.Result{}, err
 			}
 
 			if ok := controllerutil.RemoveFinalizer(&kv, keyValueFinalizer); !ok {
@@ -128,7 +128,7 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &kv); err != nil {
 			l.Error(err, "failed to update keyvalue status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	in := controlplane.KeyValueInput{
@@ -160,7 +160,7 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &kv); err != nil {
 			l.Error(err, "failed to update keyvalue status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	specChanged := false
@@ -170,7 +170,7 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &kv); err != nil {
 			l.Error(err, "failed to update keyvalue status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	} else if diff != "" {
 		logStateDiff(l, "keyvalue", diff)
 		specChanged = true
@@ -184,7 +184,7 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			if statusErr := r.Status().Update(ctx, &kv); statusErr != nil {
 				l.Error(statusErr, "failed to update keyvalue status")
 			}
-			return requeueReconcileErr, nil
+			return ctrl.Result{}, err
 		}
 
 		lastServerState := loadAnnotation(&kv, serverStateAnnotation)
@@ -209,7 +209,7 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &kv); err != nil {
 			l.Error(err, "failed to update keyvalue status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	desiredStatus := kv.Status
@@ -231,7 +231,7 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.Status().Update(ctx, &kv); err != nil {
 			l.Error(err, "failed to update keyvalue status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	newServerState, _, err := r.ControlPlane.ReadKeyValueState(ctx, in)
@@ -241,7 +241,7 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if statusErr := r.Status().Update(ctx, &kv); statusErr != nil {
 			l.Error(statusErr, "failed to update keyvalue status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	annotationsChanged := setAnnotations(&kv, appliedStateAnnotation, desiredState)

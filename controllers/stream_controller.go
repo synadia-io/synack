@@ -60,7 +60,7 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			hasDeps, err := hasDependentConsumers(ctx, r.Client, stream.Namespace, stream.Name)
 			if err != nil {
 				l.Error(err, "failed to check dependent consumers")
-				return requeueReconcileErr, nil
+				return ctrl.Result{}, err
 			}
 
 			if hasDeps {
@@ -98,7 +98,7 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				if err := r.Status().Update(ctx, &stream); err != nil {
 					l.Error(err, "failed to update stream status")
 				}
-				return requeueReconcileErr, nil
+				return ctrl.Result{}, err
 			}
 
 			if ok := controllerutil.RemoveFinalizer(&stream, streamFinalizer); !ok {
@@ -148,7 +148,7 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.Status().Update(ctx, &stream); err != nil {
 			l.Error(err, "failed to update stream status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	in := controlplane.StreamInput{
@@ -195,7 +195,7 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.Status().Update(ctx, &stream); err != nil {
 			l.Error(err, "failed to update stream status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	specChanged := false
@@ -205,7 +205,7 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.Status().Update(ctx, &stream); err != nil {
 			l.Error(err, "failed to update stream status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	} else if diff != "" {
 		logStateDiff(l, "stream", diff)
 		specChanged = true
@@ -219,7 +219,7 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			if statusErr := r.Status().Update(ctx, &stream); statusErr != nil {
 				l.Error(statusErr, "failed to update stream status")
 			}
-			return requeueReconcileErr, nil
+			return ctrl.Result{}, err
 		}
 
 		lastServerState := loadAnnotation(&stream, serverStateAnnotation)
@@ -244,7 +244,7 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.Status().Update(ctx, &stream); err != nil {
 			l.Error(err, "failed to update stream status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	desiredStatus := stream.Status
@@ -266,7 +266,7 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.Status().Update(ctx, &stream); err != nil {
 			l.Error(err, "failed to update stream status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	newServerState, _, err := r.ControlPlane.ReadStreamState(ctx, in)
@@ -276,7 +276,7 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if statusErr := r.Status().Update(ctx, &stream); statusErr != nil {
 			l.Error(statusErr, "failed to update stream status")
 		}
-		return requeueReconcileErr, nil
+		return ctrl.Result{}, err
 	}
 
 	annotationsChanged := setAnnotations(&stream, appliedStateAnnotation, desiredState)

@@ -250,14 +250,11 @@ func TestStreamReconcileEnsureError(t *testing.T) {
 		return controlplane.StreamResult{}, fmt.Errorf("control plane unavailable")
 	}
 
-	result, err := r.Reconcile(context.Background(), ctrl.Request{
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: stream.Name, Namespace: stream.Namespace},
 	})
-	if err != nil {
-		t.Fatalf("reconcile: %v", err)
-	}
-	if result.RequeueAfter != 15*time.Second {
-		t.Fatalf("expected 15s error requeue, got %v", result.RequeueAfter)
+	if err == nil || !strings.Contains(err.Error(), "control plane unavailable") {
+		t.Fatalf("expected control plane error, got %v", err)
 	}
 
 	var got natsv1.Stream
