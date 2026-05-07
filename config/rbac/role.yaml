@@ -1,0 +1,88 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: synack-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - synack.synadia.io
+  resources:
+  - accounts
+  - appuserrolebindings
+  - consumers
+  - keyvalues
+  - natsusers
+  - objectstores
+  - streams
+  - teams
+  - teamserviceaccounts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - synack.synadia.io
+  resources:
+  - accounts/finalizers
+  - appuserrolebindings/finalizers
+  - consumers/finalizers
+  - keyvalues/finalizers
+  - natsusers/finalizers
+  - objectstores/finalizers
+  - streams/finalizers
+  - teams/finalizers
+  - teamserviceaccounts/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - synack.synadia.io
+  resources:
+  - accounts/status
+  - appuserrolebindings/status
+  - consumers/status
+  - keyvalues/status
+  - natsusers/status
+  - objectstores/status
+  - streams/status
+  - teams/status
+  - teamserviceaccounts/status
+  verbs:
+  - get
+  - patch
+  - update

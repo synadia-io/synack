@@ -1,0 +1,12 @@
+namespace: synack-system
+
+resources:
+- namespace.yaml
+- ../crd
+- ../rbac
+- ../manager
+
+images:
+- name: synack
+  newName: registry.synadia.io/synack
+  newTag: v0.1.0

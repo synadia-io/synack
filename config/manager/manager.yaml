@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: synack-controller-manager
+  namespace: synack-system
+  labels:
+    app.kubernetes.io/name: synack
+    app.kubernetes.io/component: controller-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: synack
+      app.kubernetes.io/component: controller-manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: synack
+        app.kubernetes.io/component: controller-manager
+    spec:
+      serviceAccountName: synack-controller-manager
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: manager
+        image: synack
+        imagePullPolicy: IfNotPresent
+        command:
+        - /synack
+        args:
+        - --leader-elect
+        - --metrics-bind-address=127.0.0.1:8080
+        - --health-probe-bind-address=:8081
+        env:
+        - name: SYNACK_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: synack-token
+              key: SYNACK_TOKEN
+        ports:
+        - name: probes
+          containerPort: 8081
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: probes
+          initialDelaySeconds: 10
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: probes
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        securityContext:
+          runAsUser: 65532
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL

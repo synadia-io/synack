@@ -1,0 +1,10 @@
+resources:
+- bases/synack.synadia.io_accounts.yaml
+- bases/synack.synadia.io_appuserrolebindings.yaml
+- bases/synack.synadia.io_consumers.yaml
+- bases/synack.synadia.io_keyvalues.yaml
+- bases/synack.synadia.io_natsusers.yaml
+- bases/synack.synadia.io_objectstores.yaml
+- bases/synack.synadia.io_streams.yaml
+- bases/synack.synadia.io_teams.yaml
+- bases/synack.synadia.io_teamserviceaccounts.yaml
