@@ -42,22 +42,23 @@ func (c *client) EnsureNatsUser(ctx context.Context, in NatsUserInput) (NatsUser
 
 	// If we already know the ID use it directly, don't fall through to create.
 	if in.NatsUserID != "" {
-		name := in.Name
-		updateReq := syncp.NatsUserUpdateRequest{
-			Name:             &name,
-			JwtExpiresInSecs: in.Spec.JwtExpiresInSecs,
-		}
-
-		updated, _, err := c.api.NatsUserAPI.UpdateNatsUser(authCtx, in.NatsUserID).NatsUserUpdateRequest(updateReq).Execute()
+		existing, _, err := c.api.NatsUserAPI.GetNatsUser(authCtx, in.NatsUserID).Execute()
 		if err != nil {
 			err = withAPIError(err)
 			if isStatusCode(err, http.StatusNotFound) {
-				l.Info("known nats user ID not found, recreating by name", "resourceID", in.NatsUserID)
+				l.Info("known nats user ID not found, creating new nats user", "resourceID", in.NatsUserID)
 				in.NatsUserID = ""
 			} else {
+				return NatsUserResult{}, fmt.Errorf("get nats user by id %q: %w", in.NatsUserID, err)
+			}
+		} else if err := validateNatsUserSigningKeyGroup(existing, in.SigningKeyGroupID); err != nil {
+			return NatsUserResult{}, fmt.Errorf("nats user %q: %w", in.NatsUserID, err)
+		} else {
+			updated, _, err := c.api.NatsUserAPI.UpdateNatsUser(authCtx, in.NatsUserID).NatsUserUpdateRequest(natsUserUpdateRequest(in)).Execute()
+			if err != nil {
+				err = withAPIError(err)
 				return NatsUserResult{}, fmt.Errorf("update nats user by id %q: %w", in.NatsUserID, err)
 			}
-		} else {
 			l.Info("nats user updated", "resourceID", updated.Id, "accountID", accountID)
 			return NatsUserResult{
 				NatsUserID:    updated.Id,
@@ -67,38 +68,6 @@ func (c *client) EnsureNatsUser(ctx context.Context, in NatsUserInput) (NatsUser
 		}
 	}
 
-	// List and match by name
-	list, _, err := c.api.AccountAPI.ListUsers(authCtx, accountID).Execute()
-	if err != nil {
-		err = withAPIError(err)
-		return NatsUserResult{}, fmt.Errorf("list nats users: %w", err)
-	}
-
-	for _, u := range list.Items {
-		if u.Name == in.Name {
-			// Found existing user - update it
-			name := in.Name
-			updateReq := syncp.NatsUserUpdateRequest{
-				Name:             &name,
-				JwtExpiresInSecs: in.Spec.JwtExpiresInSecs,
-			}
-
-			updated, _, err := c.api.NatsUserAPI.UpdateNatsUser(authCtx, u.Id).NatsUserUpdateRequest(updateReq).Execute()
-			if err != nil {
-				err = withAPIError(err)
-				return NatsUserResult{}, fmt.Errorf("update nats user %q: %w", u.Id, err)
-			}
-
-			l.Info("nats user updated (by name match)", "resourceID", updated.Id, "accountID", accountID)
-			return NatsUserResult{
-				NatsUserID:    updated.Id,
-				AccountID:     accountID,
-				UserPublicKey: updated.UserPublicKey,
-			}, nil
-		}
-	}
-
-	// Create new user
 	createReq := syncp.NatsUserCreateRequest{
 		Name:             in.Name,
 		SkGroupId:        in.SigningKeyGroupID,
@@ -131,6 +100,50 @@ func (c *client) EnsureNatsUser(ctx context.Context, in NatsUserInput) (NatsUser
 	}, nil
 }
 
+func natsUserUpdateRequest(in NatsUserInput) syncp.NatsUserUpdateRequest {
+	name := in.Name
+	updateReq := syncp.NatsUserUpdateRequest{
+		Name:             &name,
+		JwtExpiresInSecs: in.Spec.JwtExpiresInSecs,
+	}
+
+	if jwtSettings := natsUserJwtSettingsPatch(in.Spec); jwtSettings != nil {
+		updateReq.JwtSettings = jwtSettings
+	}
+
+	return updateReq
+}
+
+func natsUserJwtSettingsPatch(spec natsv1.NatsUserSpec) *syncp.NatsUserJwtSettingsPatch {
+	if spec.BearerToken == nil && spec.Data == nil && spec.Payload == nil && spec.Subs == nil &&
+		spec.AllowedConnectionTypes == nil && spec.Tags == nil {
+		return nil
+	}
+
+	return &syncp.NatsUserJwtSettingsPatch{
+		BearerToken:            spec.BearerToken,
+		Data:                   spec.Data,
+		Payload:                spec.Payload,
+		Subs:                   spec.Subs,
+		AllowedConnectionTypes: spec.AllowedConnectionTypes,
+		Tags:                   spec.Tags,
+	}
+}
+
+func validateNatsUserSigningKeyGroup(user *syncp.NatsUserViewResponse, desiredID string) error {
+	if desiredID == "" {
+		return nil
+	}
+	if user.SkGroupId != nil && *user.SkGroupId == desiredID {
+		return nil
+	}
+	actualID := ""
+	if user.SkGroupId != nil {
+		actualID = *user.SkGroupId
+	}
+	return fmt.Errorf("signing key group is %q, want %q; updating signing key group for an existing user is not currently supported by the Control Plane API", actualID, desiredID)
+}
+
 func (c *client) DeleteNatsUser(ctx context.Context, in NatsUserInput) error {
 	l := log.FromContext(ctx).WithValues("resourceType", "natsUser", "resourceName", in.Name)
 
@@ -139,45 +152,18 @@ func (c *client) DeleteNatsUser(ctx context.Context, in NatsUserInput) error {
 		return err
 	}
 
-	userID := in.NatsUserID
-	if userID == "" {
-		accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
-		if err != nil {
-			return err
-		}
-
-		list, _, err := c.api.AccountAPI.ListUsers(authCtx, accountID).Execute()
-		if err != nil {
-			err = withAPIError(err)
-			return fmt.Errorf("list nats users for delete: %w", err)
-		}
-
-		found := make([]string, 0)
-		for _, u := range list.Items {
-			if u.Name == in.Name {
-				found = append(found, u.Id)
-			}
-		}
-
-		if len(found) == 0 {
-			return nil
-		}
-
-		if len(found) > 1 {
-			return fmt.Errorf("multiple nats users found with name %q in account %q: %s", in.Name, accountID, strings.Join(found, ", "))
-		}
-
-		userID = found[0]
+	if in.NatsUserID == "" {
+		return nil
 	}
 
-	_, err = c.api.NatsUserAPI.DeleteNatsUser(authCtx, userID).Execute()
+	_, err = c.api.NatsUserAPI.DeleteNatsUser(authCtx, in.NatsUserID).Execute()
 	if err == nil || isStatusCode(err, http.StatusNotFound) {
-		l.Info("nats user deleted", "resourceID", userID)
+		l.Info("nats user deleted", "resourceID", in.NatsUserID)
 		return nil
 	}
 	err = withAPIError(err)
 
-	return fmt.Errorf("delete nats user %q: %w", userID, err)
+	return fmt.Errorf("delete nats user %q: %w", in.NatsUserID, err)
 }
 
 func (c *client) ReadNatsUserState(ctx context.Context, in NatsUserInput) ([]byte, bool, error) {
@@ -196,28 +182,6 @@ func (c *client) ReadNatsUserState(ctx context.Context, in NatsUserInput) ([]byt
 			return nil, false, fmt.Errorf("get nats user by id %q: %w", in.NatsUserID, err)
 		}
 		state, err := json.Marshal(user)
-		if err != nil {
-			return nil, false, err
-		}
-		return state, true, nil
-	}
-
-	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
-	if err != nil {
-		return nil, false, err
-	}
-
-	list, _, err := c.api.AccountAPI.ListUsers(authCtx, accountID).Execute()
-	if err != nil {
-		err = withAPIError(err)
-		return nil, false, fmt.Errorf("list nats users: %w", err)
-	}
-
-	for _, u := range list.Items {
-		if u.Name != in.Name {
-			continue
-		}
-		state, err := json.Marshal(u)
 		if err != nil {
 			return nil, false, err
 		}
