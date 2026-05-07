@@ -187,7 +187,7 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			} else if diff == "" {
 				return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 			} else {
-				l.Info("server-side drift detected for consumer. Reverting...\n" + diff)
+				l.Info("server-side drift detected for consumer; reconciling desired state\n" + diff)
 			}
 		} else if !found {
 			l.Info("consumer not found on server, will re-create")

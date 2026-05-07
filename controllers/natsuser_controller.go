@@ -209,7 +209,7 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			} else if diff == "" {
 				return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 			} else {
-				l.Info("server-side drift detected for nats user. Reverting...\n" + diff)
+				l.Info("server-side drift detected for nats user; reconciling desired state\n" + diff)
 			}
 		} else if !found {
 			l.Info("nats user not found on server, will re-create")

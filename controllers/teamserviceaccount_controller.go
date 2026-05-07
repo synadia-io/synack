@@ -196,7 +196,7 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 			} else if diff == "" {
 				return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 			} else {
-				l.Info("server-side drift detected for team service account. Reverting...\n" + diff)
+				l.Info("server-side drift detected for team service account; reconciling desired state\n" + diff)
 			}
 		} else if !found {
 			l.Info("team service account not found on server, will re-create")

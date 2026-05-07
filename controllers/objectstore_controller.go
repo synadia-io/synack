@@ -191,7 +191,7 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			} else if diff == "" {
 				return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 			} else {
-				l.Info("server-side drift detected for object store. Reverting...\n" + diff)
+				l.Info("server-side drift detected for object store; reconciling desired state\n" + diff)
 			}
 		} else if !found {
 			l.Info("object store not found on server, will re-create")

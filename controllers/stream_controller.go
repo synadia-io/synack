@@ -230,7 +230,7 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			} else if diff == "" {
 				return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 			} else {
-				l.Info("server-side drift detected for stream. Reverting...\n" + diff)
+				l.Info("server-side drift detected for stream; reconciling desired state\n" + diff)
 			}
 		} else if !found {
 			l.Info("stream not found on server, will re-create")

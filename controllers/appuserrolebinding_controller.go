@@ -219,7 +219,7 @@ func (r *AppUserRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.R
 			} else if diff == "" {
 				return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 			} else {
-				l.Info("server-side drift detected for app user role binding. Reverting...\n" + diff)
+				l.Info("server-side drift detected for app user role binding; reconciling desired state\n" + diff)
 			}
 		} else if !found {
 			l.Info("app user role binding not found on server, will re-create")

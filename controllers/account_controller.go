@@ -156,7 +156,7 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 			} else {
 				logStateDiff(l, "account", diff)
-				l.Info("server-side drift detected for account. Reverting...\n" + diff)
+				l.Info("server-side drift detected for account; reconciling desired state\n" + diff)
 			}
 		} else if !found {
 			l.Info("account not found on server, will re-create")

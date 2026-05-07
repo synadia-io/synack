@@ -195,7 +195,7 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			} else if diff == "" {
 				return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 			} else {
-				l.Info("server-side drift detected for keyvalue. Reverting...\n" + diff)
+				l.Info("server-side drift detected for keyvalue; reconciling desired state\n" + diff)
 			}
 		} else if !found {
 			l.Info("keyvalue not found on server, will re-create")

@@ -151,7 +151,7 @@ func (r *TeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			} else if diff == "" {
 				return ctrl.Result{RequeueAfter: r.RequeueInterval}, nil
 			} else {
-				l.Info("server-side drift detected for team. Reverting...\n" + diff)
+				l.Info("server-side drift detected for team; reconciling desired state\n" + diff)
 			}
 		} else if !found {
 			l.Info("team not found on server, will re-create")

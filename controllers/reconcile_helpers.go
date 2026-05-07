@@ -71,10 +71,15 @@ func logStateDiff(log logr.Logger, resource string, diff string) {
 }
 
 func loadAnnotation(obj client.Object, key string) []byte {
-	if obj.GetAnnotations() == nil {
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
 		return nil
 	}
-	return []byte(obj.GetAnnotations()[key])
+	value, ok := annotations[key]
+	if !ok {
+		return nil
+	}
+	return []byte(value)
 }
 
 // hasDependentStreams returns true if any Stream in the same namespace references the given account by name.
