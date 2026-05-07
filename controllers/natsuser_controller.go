@@ -44,7 +44,7 @@ const (
 // +kubebuilder:rbac:groups=synack.synadia.io,resources=natsusers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=synack.synadia.io,resources=natsusers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=synack.synadia.io,resources=accounts,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)

@@ -19,6 +19,9 @@ import (
 	"github.com/synadia-io/synack/internal/controlplane"
 )
 
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch;update
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
+
 var scheme = runtime.NewScheme()
 
 func init() {
