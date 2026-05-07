@@ -185,9 +185,25 @@ func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
-	readIn := in
-	readIn.AccountID = out.AccountID
-	newServerState, _, _ := r.ControlPlane.ReadAccountState(ctx, readIn)
+	in.AccountID = out.AccountID
+	desiredState, err = json.Marshal(in)
+	if err != nil {
+		account.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &account); err != nil {
+			l.Error(err, "failed to update account status")
+		}
+		return requeueReconcileErr, nil
+	}
+
+	newServerState, _, err := r.ControlPlane.ReadAccountState(ctx, in)
+	if err != nil {
+		l.Error(err, "failed to read account server state")
+		account.Status.Message = err.Error()
+		if statusErr := r.Status().Update(ctx, &account); statusErr != nil {
+			l.Error(statusErr, "failed to update account status")
+		}
+		return requeueReconcileErr, nil
+	}
 
 	annotationsChanged := setAnnotations(&account, appliedStateAnnotation, desiredState)
 	if newServerState != nil {

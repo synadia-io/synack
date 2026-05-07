@@ -220,9 +220,25 @@ func (r *ObjectStoreReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 
-	readIn := in
-	readIn.ObjectStoreID = out.ObjectStoreID
-	newServerState, _, _ := r.ControlPlane.ReadObjectStoreState(ctx, readIn)
+	in.ObjectStoreID = out.ObjectStoreID
+	desiredState, err = json.Marshal(in)
+	if err != nil {
+		obj.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &obj); err != nil {
+			l.Error(err, "failed to update object store status")
+		}
+		return requeueReconcileErr, nil
+	}
+
+	newServerState, _, err := r.ControlPlane.ReadObjectStoreState(ctx, in)
+	if err != nil {
+		l.Error(err, "failed to read object store server state")
+		obj.Status.Message = err.Error()
+		if statusErr := r.Status().Update(ctx, &obj); statusErr != nil {
+			l.Error(statusErr, "failed to update object store status")
+		}
+		return requeueReconcileErr, nil
+	}
 
 	annotationsChanged := setAnnotations(&obj, appliedStateAnnotation, desiredState)
 	if newServerState != nil {

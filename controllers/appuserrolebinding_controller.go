@@ -251,7 +251,15 @@ func (r *AppUserRoleBindingReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 	}
 
-	newServerState, _, _ := r.ControlPlane.ReadAppUserRoleBindingState(ctx, in)
+	newServerState, _, err := r.ControlPlane.ReadAppUserRoleBindingState(ctx, in)
+	if err != nil {
+		l.Error(err, "failed to read binding server state")
+		binding.Status.Message = err.Error()
+		if statusErr := r.Status().Update(ctx, &binding); statusErr != nil {
+			l.Error(statusErr, "failed to update binding status")
+		}
+		return requeueReconcileErr, nil
+	}
 
 	annotationsChanged := setAnnotations(&binding, appliedStateAnnotation, desiredState)
 	if newServerState != nil {

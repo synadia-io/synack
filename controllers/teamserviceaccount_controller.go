@@ -218,9 +218,25 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 	}
 
-	readIn := in
-	readIn.ServiceAccountID = out.ServiceAccountID
-	newServerState, _, _ := r.ControlPlane.ReadTeamServiceAccountState(ctx, readIn)
+	in.ServiceAccountID = out.ServiceAccountID
+	desiredState, err = json.Marshal(in)
+	if err != nil {
+		tsa.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &tsa); err != nil {
+			l.Error(err, "failed to update team service account status")
+		}
+		return requeueReconcileErr, nil
+	}
+
+	newServerState, _, err := r.ControlPlane.ReadTeamServiceAccountState(ctx, in)
+	if err != nil {
+		l.Error(err, "failed to read team service account server state")
+		tsa.Status.Message = err.Error()
+		if statusErr := r.Status().Update(ctx, &tsa); statusErr != nil {
+			l.Error(statusErr, "failed to update team service account status")
+		}
+		return requeueReconcileErr, nil
+	}
 
 	annotationsChanged := setAnnotations(&tsa, appliedStateAnnotation, desiredState)
 	if newServerState != nil {

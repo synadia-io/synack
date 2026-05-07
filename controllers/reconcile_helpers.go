@@ -19,7 +19,7 @@ import (
 const (
 	conflictRetryDelay = 2 * time.Second
 
-	appliedStateAnnotation = "synack.synadia.io/last-applied-input"
+	appliedStateAnnotation = "synack.synadia.io/last-applied-state"
 	serverStateAnnotation  = "synack.synadia.io/last-server-state"
 
 	messageApplied = "applied"

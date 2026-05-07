@@ -232,6 +232,52 @@ func TestDeleteConsumerWithoutTypeFallsBackToPushByDerivedConsumerID(t *testing.
 	}
 }
 
+func TestDeleteConsumerWithKnownIDWithoutTypeFallsBackToPush(t *testing.T) {
+	var pullDeleteCalls int
+	var pushDeleteCalls int
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		switch {
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/core/beta/consumers/pull/S-1.orders":
+			pullDeleteCalls++
+			w.WriteHeader(http.StatusNotFound)
+			writeControlPlaneJSON(t, w, map[string]any{
+				"error": "not found",
+			})
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/core/beta/consumers/push/S-1.orders":
+			pushDeleteCalls++
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Logf("unexpected request: %s %s", r.Method, r.URL.String())
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	t.Setenv("SYNACK_TEST_TOKEN", "token")
+	cp, err := NewClient(Options{BaseURL: server.URL, TokenEnv: "SYNACK_TEST_TOKEN", Timeout: time.Second})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+
+	if err := cp.DeleteConsumer(context.Background(), ConsumerInput{
+		StreamID:   "S-1",
+		ConsumerID: "S-1.orders",
+		Spec:       natsv1.ConsumerSpec{Name: "orders"},
+	}); err != nil {
+		t.Fatalf("DeleteConsumer() error = %v", err)
+	}
+
+	if pullDeleteCalls != 1 {
+		t.Fatalf("pullDeleteCalls = %d, want 1", pullDeleteCalls)
+	}
+	if pushDeleteCalls != 1 {
+		t.Fatalf("pushDeleteCalls = %d, want 1", pushDeleteCalls)
+	}
+}
+
 func pullConsumerInfo(id, name string, configOverrides map[string]any) map[string]any {
 	return consumerInfo(id, name, "pull", configOverrides)
 }

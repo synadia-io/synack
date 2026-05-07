@@ -259,9 +259,25 @@ func (r *StreamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 	}
 
-	readIn := in
-	readIn.StreamID = out.StreamID
-	newServerState, _, _ := r.ControlPlane.ReadStreamState(ctx, readIn)
+	in.StreamID = out.StreamID
+	desiredState, err = json.Marshal(in)
+	if err != nil {
+		stream.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &stream); err != nil {
+			l.Error(err, "failed to update stream status")
+		}
+		return requeueReconcileErr, nil
+	}
+
+	newServerState, _, err := r.ControlPlane.ReadStreamState(ctx, in)
+	if err != nil {
+		l.Error(err, "failed to read stream server state")
+		stream.Status.Message = err.Error()
+		if statusErr := r.Status().Update(ctx, &stream); statusErr != nil {
+			l.Error(statusErr, "failed to update stream status")
+		}
+		return requeueReconcileErr, nil
+	}
 
 	annotationsChanged := setAnnotations(&stream, appliedStateAnnotation, desiredState)
 	if newServerState != nil {

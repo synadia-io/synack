@@ -218,9 +218,26 @@ func (r *ConsumerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
-	readIn := in
-	readIn.ConsumerID = out.ConsumerID
-	newServerState, _, _ := r.ControlPlane.ReadConsumerState(ctx, readIn)
+	in.ConsumerID = out.ConsumerID
+	in.StreamID = out.StreamID
+	desiredState, err = json.Marshal(in)
+	if err != nil {
+		consumer.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &consumer); err != nil {
+			l.Error(err, "failed to update consumer status")
+		}
+		return requeueReconcileErr, nil
+	}
+
+	newServerState, _, err := r.ControlPlane.ReadConsumerState(ctx, in)
+	if err != nil {
+		l.Error(err, "failed to read consumer server state")
+		consumer.Status.Message = err.Error()
+		if statusErr := r.Status().Update(ctx, &consumer); statusErr != nil {
+			l.Error(statusErr, "failed to update consumer status")
+		}
+		return requeueReconcileErr, nil
+	}
 
 	annotationsChanged := setAnnotations(&consumer, appliedStateAnnotation, desiredState)
 	if newServerState != nil {

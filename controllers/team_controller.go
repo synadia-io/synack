@@ -172,9 +172,25 @@ func (r *TeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 	}
 
-	readIn := in
-	readIn.TeamID = out.TeamID
-	newServerState, _, _ := r.ControlPlane.ReadTeamState(ctx, readIn)
+	in.TeamID = out.TeamID
+	desiredState, err = json.Marshal(in)
+	if err != nil {
+		team.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &team); err != nil {
+			l.Error(err, "failed to update team status")
+		}
+		return requeueReconcileErr, nil
+	}
+
+	newServerState, _, err := r.ControlPlane.ReadTeamState(ctx, in)
+	if err != nil {
+		l.Error(err, "failed to read team server state")
+		team.Status.Message = err.Error()
+		if statusErr := r.Status().Update(ctx, &team); statusErr != nil {
+			l.Error(statusErr, "failed to update team status")
+		}
+		return requeueReconcileErr, nil
+	}
 
 	annotationsChanged := setAnnotations(&team, appliedStateAnnotation, desiredState)
 	if newServerState != nil {

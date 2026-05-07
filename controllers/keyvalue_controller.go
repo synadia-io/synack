@@ -224,9 +224,25 @@ func (r *KeyValueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
-	readIn := in
-	readIn.KeyValueID = out.KeyValueID
-	newServerState, _, _ := r.ControlPlane.ReadKeyValueState(ctx, readIn)
+	in.KeyValueID = out.KeyValueID
+	desiredState, err = json.Marshal(in)
+	if err != nil {
+		kv.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &kv); err != nil {
+			l.Error(err, "failed to update keyvalue status")
+		}
+		return requeueReconcileErr, nil
+	}
+
+	newServerState, _, err := r.ControlPlane.ReadKeyValueState(ctx, in)
+	if err != nil {
+		l.Error(err, "failed to read keyvalue server state")
+		kv.Status.Message = err.Error()
+		if statusErr := r.Status().Update(ctx, &kv); statusErr != nil {
+			l.Error(statusErr, "failed to update keyvalue status")
+		}
+		return requeueReconcileErr, nil
+	}
 
 	annotationsChanged := setAnnotations(&kv, appliedStateAnnotation, desiredState)
 	if newServerState != nil {

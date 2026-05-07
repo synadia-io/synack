@@ -281,9 +281,25 @@ func (r *NatsUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
-	readIn := in
-	readIn.NatsUserID = out.NatsUserID
-	newServerState, _, _ := r.ControlPlane.ReadNatsUserState(ctx, readIn)
+	in.NatsUserID = out.NatsUserID
+	desiredState, err = json.Marshal(in)
+	if err != nil {
+		natsUser.Status.Message = err.Error()
+		if err := r.Status().Update(ctx, &natsUser); err != nil {
+			l.Error(err, "failed to update nats user status")
+		}
+		return requeueReconcileErr, nil
+	}
+
+	newServerState, _, err := r.ControlPlane.ReadNatsUserState(ctx, in)
+	if err != nil {
+		l.Error(err, "failed to read nats user server state")
+		natsUser.Status.Message = err.Error()
+		if statusErr := r.Status().Update(ctx, &natsUser); statusErr != nil {
+			l.Error(statusErr, "failed to update nats user status")
+		}
+		return requeueReconcileErr, nil
+	}
 
 	annotationsChanged := setAnnotations(&natsUser, appliedStateAnnotation, desiredState)
 	if newServerState != nil {

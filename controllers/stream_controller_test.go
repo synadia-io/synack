@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -180,6 +181,18 @@ func TestStreamReconcileUsesReferencedAccountID(t *testing.T) {
 	}
 	if got.Status.Message != "applied" {
 		t.Fatalf("expected status message applied, got %q", got.Status.Message)
+	}
+
+	var applied controlplane.StreamInput
+	rawApplied := got.Annotations[appliedStateAnnotation]
+	if rawApplied == "" {
+		t.Fatal("expected applied state annotation to be set")
+	}
+	if err := json.Unmarshal([]byte(rawApplied), &applied); err != nil {
+		t.Fatalf("unmarshal applied state: %v", err)
+	}
+	if applied.StreamID != "S-999" {
+		t.Fatalf("expected applied state stream ID S-999, got %q", applied.StreamID)
 	}
 }
 
