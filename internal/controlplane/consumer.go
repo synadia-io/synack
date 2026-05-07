@@ -268,8 +268,6 @@ func pullConsumerConfig(in ConsumerInput) syncp.JSPullConsumerConfigRequest {
 	}
 	if s.DurableName != "" {
 		cfg.DurableName = &s.DurableName
-	} else {
-		cfg.DurableName = &name
 	}
 	if s.AckWait != "" {
 		if d, err := time.ParseDuration(s.AckWait); err == nil {

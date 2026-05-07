@@ -45,6 +45,15 @@ func (c *client) EnsureKeyValue(ctx context.Context, in KeyValueInput) (KeyValue
 		return KeyValueResult{}, err
 	}
 
+	accountID := in.AccountID
+	if in.KeyValueID == "" {
+		accountID, err = c.resolveAccountID(authCtx, in.AccountSelectors)
+		if err != nil {
+			return KeyValueResult{}, err
+		}
+		in.KeyValueID = streamIDFromAccount(accountID, keyValueStreamName(in.Bucket))
+	}
+
 	// If we already know the ID use it directly, don't fall through to create.
 	if in.KeyValueID != "" {
 		updateReq := inputToKVUpdateConfig(in)
@@ -52,7 +61,7 @@ func (c *client) EnsureKeyValue(ctx context.Context, in KeyValueInput) (KeyValue
 		if err != nil {
 			err = withAPIError(err)
 			if isStatusCode(err, http.StatusNotFound) {
-				l.Info("known kv bucket ID not found, recreating by bucket name", "resourceID", in.KeyValueID)
+				l.Info("known kv bucket ID not found, creating new kv bucket", "resourceID", in.KeyValueID)
 				in.KeyValueID = ""
 			} else {
 				return KeyValueResult{}, fmt.Errorf("update kv bucket by id %q: %w", in.KeyValueID, err)
@@ -63,29 +72,11 @@ func (c *client) EnsureKeyValue(ctx context.Context, in KeyValueInput) (KeyValue
 		}
 	}
 
-	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
-	if err != nil {
-		return KeyValueResult{}, err
-	}
-
-	list, _, err := c.api.AccountAPI.ListKvBuckets(authCtx, accountID).Execute()
-	if err != nil {
-		err = withAPIError(err)
-		return KeyValueResult{}, fmt.Errorf("list kv buckets: %w", err)
-	}
-
-	for _, kv := range list.Items {
-		if kv.Config.Bucket != in.Bucket {
-			continue
-		}
-		updateReq := inputToKVUpdateConfig(in)
-		updated, _, err := c.api.KvBucketAPI.UpdateKvBucket(authCtx, kv.Id).JSKVBucketUpdateRequest(updateReq).Execute()
+	if accountID == "" {
+		accountID, err = c.resolveAccountID(authCtx, in.AccountSelectors)
 		if err != nil {
-			err = withAPIError(err)
-			return KeyValueResult{}, fmt.Errorf("update kv bucket %q: %w", in.Bucket, err)
+			return KeyValueResult{}, err
 		}
-		l.Info("keyvalue updated", "resourceID", updated.Id, "accountID", accountID)
-		return KeyValueResult{AccountID: accountID, KeyValueID: updated.Id}, nil
 	}
 
 	desired := inputToKVConfig(in)
@@ -110,39 +101,30 @@ func (c *client) DeleteKeyValue(ctx context.Context, in KeyValueInput) error {
 
 	if in.KeyValueID != "" {
 		_, err := c.api.KvBucketAPI.DeleteKvBucket(authCtx, in.KeyValueID).Execute()
+		err = withAPIError(err)
 		if err == nil || isStatusCode(err, http.StatusNotFound) {
 			l.Info("keyvalue deleted", "resourceID", in.KeyValueID)
 			return nil
 		}
-		err = withAPIError(err)
 		return fmt.Errorf("delete kv bucket by id %q: %w", in.KeyValueID, err)
 	}
 
 	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
 	if err != nil {
-		if errors.Is(err, ErrAccountNotFound) {
+		if isAccountNotFound(err) {
 			return nil
 		}
 		return err
 	}
-
-	list, _, err := c.api.AccountAPI.ListKvBuckets(authCtx, accountID).Execute()
-	if err != nil {
+	in.KeyValueID = streamIDFromAccount(accountID, keyValueStreamName(in.Bucket))
+	if in.KeyValueID != "" {
+		_, err := c.api.KvBucketAPI.DeleteKvBucket(authCtx, in.KeyValueID).Execute()
 		err = withAPIError(err)
-		return fmt.Errorf("list kv buckets for delete: %w", err)
-	}
-
-	for _, kv := range list.Items {
-		if kv.Config.Bucket != in.Bucket {
-			continue
-		}
-		_, err := c.api.KvBucketAPI.DeleteKvBucket(authCtx, kv.Id).Execute()
 		if err == nil || isStatusCode(err, http.StatusNotFound) {
-			l.Info("keyvalue deleted", "resourceID", kv.Id, "accountID", accountID)
+			l.Info("keyvalue deleted", "resourceID", in.KeyValueID)
 			return nil
 		}
-		err = withAPIError(err)
-		return fmt.Errorf("delete kv bucket %q: %w", in.Bucket, err)
+		return fmt.Errorf("delete kv bucket by id %q: %w", in.KeyValueID, err)
 	}
 
 	return nil
@@ -172,21 +154,20 @@ func (c *client) ReadKeyValueState(ctx context.Context, in KeyValueInput) ([]byt
 
 	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
 	if err != nil {
-		if errors.Is(err, ErrAccountNotFound) {
+		if isAccountNotFound(err) {
 			return nil, false, nil
 		}
 		return nil, false, err
 	}
-
-	list, _, err := c.api.AccountAPI.ListKvBuckets(authCtx, accountID).Execute()
-	if err != nil {
-		err = withAPIError(err)
-		return nil, false, fmt.Errorf("list kv buckets: %w", err)
-	}
-
-	for _, kv := range list.Items {
-		if kv.Config.Bucket != in.Bucket {
-			continue
+	in.KeyValueID = streamIDFromAccount(accountID, keyValueStreamName(in.Bucket))
+	if in.KeyValueID != "" {
+		kv, _, err := c.api.KvBucketAPI.GetKvBucket(authCtx, in.KeyValueID).Execute()
+		if err != nil {
+			err = withAPIError(err)
+			if isStatusCode(err, http.StatusNotFound) {
+				return nil, false, nil
+			}
+			return nil, false, fmt.Errorf("get kv bucket by id %q: %w", in.KeyValueID, err)
 		}
 		state, err := json.Marshal(kv.Config)
 		if err != nil {
@@ -196,6 +177,17 @@ func (c *client) ReadKeyValueState(ctx context.Context, in KeyValueInput) ([]byt
 	}
 
 	return nil, false, nil
+}
+
+func keyValueStreamName(bucket string) string {
+	if bucket == "" {
+		return ""
+	}
+	return "KV_" + bucket
+}
+
+func isAccountNotFound(err error) bool {
+	return errors.Is(err, ErrAccountNotFound)
 }
 
 func inputToKVConfig(in KeyValueInput) syncp.JSKVBucketConfig {

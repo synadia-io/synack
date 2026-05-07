@@ -157,11 +157,11 @@ func (c *client) DeleteNatsUser(ctx context.Context, in NatsUserInput) error {
 	}
 
 	_, err = c.api.NatsUserAPI.DeleteNatsUser(authCtx, in.NatsUserID).Execute()
+	err = withAPIError(err)
 	if err == nil || isStatusCode(err, http.StatusNotFound) {
 		l.Info("nats user deleted", "resourceID", in.NatsUserID)
 		return nil
 	}
-	err = withAPIError(err)
 
 	return fmt.Errorf("delete nats user %q: %w", in.NatsUserID, err)
 }

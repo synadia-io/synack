@@ -140,11 +140,11 @@ func (c *client) DeleteTeamServiceAccount(ctx context.Context, in TeamServiceAcc
 	}
 
 	_, err = c.api.TeamServiceAccountAPI.DeleteTeamServiceAccount(authCtx, in.ServiceAccountID).Execute()
+	err = withAPIError(err)
 	if err == nil || isStatusCode(err, http.StatusNotFound) {
 		l.Info("team service account deleted", "resourceID", in.ServiceAccountID)
 		return nil
 	}
-	err = withAPIError(err)
 
 	return fmt.Errorf("delete team service account %q: %w", in.ServiceAccountID, err)
 }

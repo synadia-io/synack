@@ -3,7 +3,6 @@ package controlplane
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -41,6 +40,15 @@ func (c *client) EnsureObjectStore(ctx context.Context, in ObjectStoreInput) (Ob
 		return ObjectStoreResult{}, err
 	}
 
+	accountID := in.AccountID
+	if in.ObjectStoreID == "" {
+		accountID, err = c.resolveAccountID(authCtx, in.AccountSelectors)
+		if err != nil {
+			return ObjectStoreResult{}, err
+		}
+		in.ObjectStoreID = streamIDFromAccount(accountID, objectStoreStreamName(in.Bucket))
+	}
+
 	// If we already know the ID use it directly, don't fall through to create.
 	if in.ObjectStoreID != "" {
 		updateReq := inputToObjectStoreUpdateConfig(in)
@@ -48,7 +56,7 @@ func (c *client) EnsureObjectStore(ctx context.Context, in ObjectStoreInput) (Ob
 		if err != nil {
 			err = withAPIError(err)
 			if isStatusCode(err, http.StatusNotFound) {
-				l.Info("known object bucket ID not found, recreating by bucket name", "resourceID", in.ObjectStoreID)
+				l.Info("known object bucket ID not found, creating new object bucket", "resourceID", in.ObjectStoreID)
 				in.ObjectStoreID = ""
 			} else {
 				return ObjectStoreResult{}, fmt.Errorf("update object bucket by id %q: %w", in.ObjectStoreID, err)
@@ -59,29 +67,11 @@ func (c *client) EnsureObjectStore(ctx context.Context, in ObjectStoreInput) (Ob
 		}
 	}
 
-	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
-	if err != nil {
-		return ObjectStoreResult{}, err
-	}
-
-	list, _, err := c.api.AccountAPI.ListObjectBuckets(authCtx, accountID).Execute()
-	if err != nil {
-		err = withAPIError(err)
-		return ObjectStoreResult{}, fmt.Errorf("list object buckets: %w", err)
-	}
-
-	for _, obj := range list.Items {
-		if obj.Config.Bucket != in.Bucket {
-			continue
-		}
-		updateReq := inputToObjectStoreUpdateConfig(in)
-		updated, _, err := c.api.ObjectBucketAPI.UpdateObjectBucket(authCtx, obj.Id).JSObjectBucketUpdateRequest(updateReq).Execute()
+	if accountID == "" {
+		accountID, err = c.resolveAccountID(authCtx, in.AccountSelectors)
 		if err != nil {
-			err = withAPIError(err)
-			return ObjectStoreResult{}, fmt.Errorf("update object bucket %q: %w", in.Bucket, err)
+			return ObjectStoreResult{}, err
 		}
-		l.Info("object store updated", "resourceID", updated.Id, "accountID", accountID)
-		return ObjectStoreResult{AccountID: accountID, ObjectStoreID: updated.Id}, nil
 	}
 
 	desired := inputToObjectStoreConfig(in)
@@ -105,39 +95,30 @@ func (c *client) DeleteObjectStore(ctx context.Context, in ObjectStoreInput) err
 
 	if in.ObjectStoreID != "" {
 		_, err := c.api.ObjectBucketAPI.DeleteObjectBucket(authCtx, in.ObjectStoreID).Execute()
+		err = withAPIError(err)
 		if err == nil || isStatusCode(err, http.StatusNotFound) {
 			l.Info("object store deleted", "resourceID", in.ObjectStoreID)
 			return nil
 		}
-		err = withAPIError(err)
 		return fmt.Errorf("delete object bucket by id %q: %w", in.ObjectStoreID, err)
 	}
 
 	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
 	if err != nil {
-		if errors.Is(err, ErrAccountNotFound) {
+		if isAccountNotFound(err) {
 			return nil
 		}
 		return err
 	}
-
-	list, _, err := c.api.AccountAPI.ListObjectBuckets(authCtx, accountID).Execute()
-	if err != nil {
+	in.ObjectStoreID = streamIDFromAccount(accountID, objectStoreStreamName(in.Bucket))
+	if in.ObjectStoreID != "" {
+		_, err := c.api.ObjectBucketAPI.DeleteObjectBucket(authCtx, in.ObjectStoreID).Execute()
 		err = withAPIError(err)
-		return fmt.Errorf("list object buckets for delete: %w", err)
-	}
-
-	for _, obj := range list.Items {
-		if obj.Config.Bucket != in.Bucket {
-			continue
-		}
-		_, err := c.api.ObjectBucketAPI.DeleteObjectBucket(authCtx, obj.Id).Execute()
 		if err == nil || isStatusCode(err, http.StatusNotFound) {
-			l.Info("object store deleted", "resourceID", obj.Id, "accountID", accountID)
+			l.Info("object store deleted", "resourceID", in.ObjectStoreID)
 			return nil
 		}
-		err = withAPIError(err)
-		return fmt.Errorf("delete object bucket %q: %w", in.Bucket, err)
+		return fmt.Errorf("delete object bucket by id %q: %w", in.ObjectStoreID, err)
 	}
 
 	return nil
@@ -167,21 +148,20 @@ func (c *client) ReadObjectStoreState(ctx context.Context, in ObjectStoreInput) 
 
 	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
 	if err != nil {
-		if errors.Is(err, ErrAccountNotFound) {
+		if isAccountNotFound(err) {
 			return nil, false, nil
 		}
 		return nil, false, err
 	}
-
-	list, _, err := c.api.AccountAPI.ListObjectBuckets(authCtx, accountID).Execute()
-	if err != nil {
-		err = withAPIError(err)
-		return nil, false, fmt.Errorf("list object buckets: %w", err)
-	}
-
-	for _, obj := range list.Items {
-		if obj.Config.Bucket != in.Bucket {
-			continue
+	in.ObjectStoreID = streamIDFromAccount(accountID, objectStoreStreamName(in.Bucket))
+	if in.ObjectStoreID != "" {
+		obj, _, err := c.api.ObjectBucketAPI.GetObjectBucket(authCtx, in.ObjectStoreID).Execute()
+		if err != nil {
+			err = withAPIError(err)
+			if isStatusCode(err, http.StatusNotFound) {
+				return nil, false, nil
+			}
+			return nil, false, fmt.Errorf("get object bucket by id %q: %w", in.ObjectStoreID, err)
 		}
 		state, err := json.Marshal(obj.Config)
 		if err != nil {
@@ -191,6 +171,13 @@ func (c *client) ReadObjectStoreState(ctx context.Context, in ObjectStoreInput) 
 	}
 
 	return nil, false, nil
+}
+
+func objectStoreStreamName(bucket string) string {
+	if bucket == "" {
+		return ""
+	}
+	return "OBJ_" + bucket
 }
 
 func inputToObjectStoreConfig(in ObjectStoreInput) syncp.JSObjectBucketConfig {

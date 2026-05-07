@@ -79,11 +79,11 @@ func (c *client) DeleteTeam(ctx context.Context, in TeamInput) error {
 	}
 
 	_, err = c.api.TeamAPI.DeleteTeam(authCtx, in.TeamID).Execute()
+	err = withAPIError(err)
 	if err == nil || isStatusCode(err, http.StatusNotFound) {
 		l.Info("team deleted", "resourceID", in.TeamID)
 		return nil
 	}
-	err = withAPIError(err)
 
 	return fmt.Errorf("delete team %q: %w", in.TeamID, err)
 }

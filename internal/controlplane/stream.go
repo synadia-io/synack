@@ -3,7 +3,6 @@ package controlplane
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -63,13 +62,22 @@ func (c *client) EnsureStream(ctx context.Context, in StreamInput) (StreamResult
 
 	desired := inputToStreamConfig(in)
 
+	accountID := in.AccountID
+	if in.StreamID == "" {
+		accountID, err = c.resolveAccountID(authCtx, in.AccountSelectors)
+		if err != nil {
+			return StreamResult{}, err
+		}
+		in.StreamID = streamIDFromAccount(accountID, in.Name)
+	}
+
 	// If we already know the ID use it directly, don't fall through to create.
 	if in.StreamID != "" {
 		updated, _, err := c.api.StreamAPI.UpdateStream(authCtx, in.StreamID).JSStreamConfigRequest(desired).Execute()
 		if err != nil {
 			err = withAPIError(err)
 			if isStatusCode(err, http.StatusNotFound) {
-				l.Info("known stream ID not found, recreating by name", "resourceID", in.StreamID)
+				l.Info("known stream ID not found, creating new stream", "resourceID", in.StreamID)
 				in.StreamID = ""
 			} else {
 				return StreamResult{}, fmt.Errorf("update stream by stream id %q: %w", in.StreamID, err)
@@ -80,31 +88,11 @@ func (c *client) EnsureStream(ctx context.Context, in StreamInput) (StreamResult
 		}
 	}
 
-	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
-	if err != nil {
-		return StreamResult{}, err
-	}
-
-	list, _, err := c.api.AccountAPI.ListStreams(authCtx, accountID).Execute()
-	if err != nil {
-		err = withAPIError(err)
-		return StreamResult{}, fmt.Errorf("list streams: %w", err)
-	}
-
-	for _, s := range list.Items {
-		if s.Config.Name != in.Name {
-			continue
-		}
-
-		updated, _, err := c.api.StreamAPI.UpdateStream(authCtx, s.Id).JSStreamConfigRequest(desired).Execute()
+	if accountID == "" {
+		accountID, err = c.resolveAccountID(authCtx, in.AccountSelectors)
 		if err != nil {
-			err = withAPIError(err)
-			return StreamResult{}, fmt.Errorf("update stream %q: %w", in.Name, err)
+			return StreamResult{}, err
 		}
-
-		l.Info("stream updated", "resourceID", updated.Id, "accountID", accountID)
-
-		return StreamResult{AccountID: accountID, StreamID: updated.Id}, nil
 	}
 
 	created, _, err := c.api.AccountAPI.CreateStream(authCtx, accountID).JSStreamConfigRequest(desired).Execute()
@@ -126,43 +114,25 @@ func (c *client) DeleteStream(ctx context.Context, in StreamInput) error {
 		return err
 	}
 
+	if in.StreamID == "" {
+		accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
+		if err != nil {
+			if isAccountNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		in.StreamID = streamIDFromAccount(accountID, in.Name)
+	}
+
 	if in.StreamID != "" {
 		_, err := c.api.StreamAPI.DeleteStream(authCtx, in.StreamID).Execute()
+		err = withAPIError(err)
 		if err == nil || isStatusCode(err, http.StatusNotFound) {
 			l.Info("stream deleted", "resourceID", in.StreamID)
 			return nil
 		}
-		err = withAPIError(err)
 		return fmt.Errorf("delete stream by stream id %q: %w", in.StreamID, err)
-	}
-
-	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
-	if err != nil {
-		if errors.Is(err, ErrAccountNotFound) {
-			return nil
-		}
-		return err
-	}
-
-	list, _, err := c.api.AccountAPI.ListStreams(authCtx, accountID).Execute()
-	if err != nil {
-		err = withAPIError(err)
-		return fmt.Errorf("list streams for delete: %w", err)
-	}
-
-	for _, s := range list.Items {
-		if s.Config.Name != in.Name {
-			continue
-		}
-
-		_, err := c.api.StreamAPI.DeleteStream(authCtx, s.Id).Execute()
-		if err == nil || isStatusCode(err, http.StatusNotFound) {
-			l.Info("stream deleted", "resourceID", s.Id, "accountID", accountID)
-			return nil
-		}
-		err = withAPIError(err)
-
-		return fmt.Errorf("delete stream %q: %w", in.Name, err)
 	}
 
 	return nil
@@ -172,6 +142,17 @@ func (c *client) ReadStreamState(ctx context.Context, in StreamInput) ([]byte, b
 	authCtx, err := c.authContext(ctx)
 	if err != nil {
 		return nil, false, err
+	}
+
+	if in.StreamID == "" {
+		accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
+		if err != nil {
+			if isAccountNotFound(err) {
+				return nil, false, nil
+			}
+			return nil, false, err
+		}
+		in.StreamID = streamIDFromAccount(accountID, in.Name)
 	}
 
 	if in.StreamID != "" {
@@ -190,32 +171,14 @@ func (c *client) ReadStreamState(ctx context.Context, in StreamInput) ([]byte, b
 		return state, true, nil
 	}
 
-	accountID, err := c.resolveAccountID(authCtx, in.AccountSelectors)
-	if err != nil {
-		if errors.Is(err, ErrAccountNotFound) {
-			return nil, false, nil
-		}
-		return nil, false, err
-	}
-
-	list, _, err := c.api.AccountAPI.ListStreams(authCtx, accountID).Execute()
-	if err != nil {
-		err = withAPIError(err)
-		return nil, false, fmt.Errorf("list streams: %w", err)
-	}
-
-	for _, s := range list.Items {
-		if s.Config.Name != in.Name {
-			continue
-		}
-		state, err := json.Marshal(s.Config)
-		if err != nil {
-			return nil, false, err
-		}
-		return state, true, nil
-	}
-
 	return nil, false, nil
+}
+
+func streamIDFromAccount(accountID, streamName string) string {
+	if accountID == "" || streamName == "" {
+		return ""
+	}
+	return accountID + "." + streamName
 }
 
 func inputToStreamConfig(in StreamInput) syncp.JSStreamConfigRequest {
