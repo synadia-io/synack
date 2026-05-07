@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/synadia-io/control-plane-sdk-go/syncp"
@@ -64,17 +65,23 @@ type Client interface {
 }
 
 type Options struct {
-	BaseURL  string
-	TokenEnv string
-	Timeout  time.Duration
+	BaseURL   string
+	TokenEnv  string
+	TokenFile string
+	Timeout   time.Duration
 }
 
 type client struct {
-	api      *syncp.APIClient
-	tokenEnv string
+	api   *syncp.APIClient
+	token string
 }
 
 func NewClient(opts Options) (Client, error) {
+	token, err := tokenFromSource(opts.TokenEnv, opts.TokenFile)
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := syncp.NewConfiguration()
 	cfg.UserAgent = "synack/0.1.0"
 	cfg.HTTPClient = &http.Client{Timeout: opts.Timeout}
@@ -89,8 +96,8 @@ func NewClient(opts Options) (Client, error) {
 	}
 
 	return &client{
-		api:      syncp.NewAPIClient(cfg),
-		tokenEnv: opts.TokenEnv,
+		api:   syncp.NewAPIClient(cfg),
+		token: token,
 	}, nil
 }
 
@@ -188,17 +195,33 @@ func (c *client) resolveAccountID(ctx context.Context, sel AccountSelectors) (st
 }
 
 func (c *client) authContext(ctx context.Context) (context.Context, error) {
-	token, err := tokenFromEnv(c.tokenEnv)
-	if err != nil {
-		return nil, err
+	return context.WithValue(ctx, syncp.ContextAccessToken, c.token), nil
+}
+
+func tokenFromSource(envName, fileName string) (string, error) {
+	if fileName != "" {
+		return tokenFromFile(fileName)
 	}
-	return context.WithValue(ctx, syncp.ContextAccessToken, token), nil
+	return tokenFromEnv(envName)
 }
 
 func tokenFromEnv(name string) (string, error) {
 	v := os.Getenv(name)
 	if v == "" {
 		return "", errors.New("control plane token not set")
+	}
+	return v, nil
+}
+
+func tokenFromFile(name string) (string, error) {
+	data, err := os.ReadFile(name)
+	if err != nil {
+		return "", fmt.Errorf("read control plane token file: %w", err)
+	}
+
+	v := strings.TrimSpace(string(data))
+	if v == "" {
+		return "", errors.New("control plane token file is empty")
 	}
 	return v, nil
 }

@@ -34,6 +34,7 @@ func main() {
 		cpBaseURL            string
 		reconcileInterval    time.Duration
 		tokenEnv             string
+		tokenFile            string
 		timeout              time.Duration
 		enableLeaderElection bool
 		metricsAddr          string
@@ -43,6 +44,7 @@ func main() {
 	flag.StringVar(&cpBaseURL, "control-plane-base-url", "https://cloud.synadia.com", "API base URL, for example https://cloud.synadia.com")
 	flag.DurationVar(&reconcileInterval, "reconcile-interval", time.Minute, "Interval between scheduled reconciliations for drift detection.")
 	flag.StringVar(&tokenEnv, "token-var", "SYNACK_TOKEN", "Environment variable name for Control Plane token.")
+	flag.StringVar(&tokenFile, "token-file", "", "File containing the Control Plane token. When set, this takes precedence over --token-var.")
 	flag.DurationVar(&timeout, "timeout", 30*time.Second, "Timeout for Control Plane API requests.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -73,9 +75,10 @@ func main() {
 	}
 
 	cpClient, err := controlplane.NewClient(controlplane.Options{
-		BaseURL:  cpBaseURL,
-		Timeout:  timeout,
-		TokenEnv: tokenEnv,
+		BaseURL:   cpBaseURL,
+		Timeout:   timeout,
+		TokenEnv:  tokenEnv,
+		TokenFile: tokenFile,
 	})
 	if err != nil {
 		os.Exit(1)
