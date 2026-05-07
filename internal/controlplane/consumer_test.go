@@ -140,6 +140,50 @@ func TestEnsureConsumerWithoutIDUpdatesByDerivedConsumerID(t *testing.T) {
 	}
 }
 
+func TestCreatePullConsumerWithoutDurableNameOmitsDurableName(t *testing.T) {
+	var createBody map[string]any
+	var createCalls int
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		switch {
+		case r.Method == http.MethodPatch && r.URL.Path == "/api/core/beta/consumers/pull/S-1.orders":
+			w.WriteHeader(http.StatusNotFound)
+			writeControlPlaneJSON(t, w, map[string]any{"error": "not found"})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/core/beta/jetstream/stream/S-1/consumers/pull":
+			createCalls++
+			if err := json.NewDecoder(r.Body).Decode(&createBody); err != nil {
+				t.Fatalf("decode create body: %v", err)
+			}
+			writeControlPlaneJSON(t, w, pullConsumerInfo("S-1.orders", "orders", nil))
+		default:
+			t.Logf("unexpected request: %s %s", r.Method, r.URL.String())
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	t.Setenv("SYNACK_TEST_TOKEN", "token")
+	cp, err := NewClient(Options{BaseURL: server.URL, TokenEnv: "SYNACK_TEST_TOKEN", Timeout: time.Second})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+
+	if _, err := cp.EnsureConsumer(context.Background(), ConsumerInput{
+		StreamID: "S-1",
+		Spec:     natsv1.ConsumerSpec{Name: "orders"},
+	}); err != nil {
+		t.Fatalf("EnsureConsumer() error = %v", err)
+	}
+	if createCalls != 1 {
+		t.Fatalf("createCalls = %d, want 1", createCalls)
+	}
+	if _, ok := createBody["durable_name"]; ok {
+		t.Fatalf("durable_name = %#v, want omitted", createBody["durable_name"])
+	}
+}
+
 func TestReadConsumerStateWithoutIDUsesDerivedConsumerID(t *testing.T) {
 	var getCalls int
 
