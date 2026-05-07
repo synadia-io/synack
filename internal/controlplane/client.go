@@ -179,7 +179,7 @@ func (c *client) resolveAccountID(ctx context.Context, sel AccountSelectors) (st
 	}
 
 	for _, a := range list.Items {
-		if a.AccountPublicKey == sel.AccountPublicNKey {
+		if a.AccountPublicKey != nil && *a.AccountPublicKey == sel.AccountPublicNKey {
 			return a.Id, nil
 		}
 	}
