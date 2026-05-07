@@ -59,6 +59,15 @@ func (r *TeamServiceAccountReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	if !tsa.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&tsa, teamServiceAccountFinalizer) {
+			if err := checkTeamServiceAccountDependents(ctx, r.Client, tsa.Namespace, tsa.Name); err != nil {
+				l.Info(err.Error())
+				tsa.Status.Message = err.Error()
+				if err := r.Status().Update(ctx, &tsa); err != nil {
+					l.Error(err, "failed to update team service account status")
+				}
+				return requeueWaitingForResource, nil
+			}
+
 			if tsa.Status.ID == "" {
 				if ok := controllerutil.RemoveFinalizer(&tsa, teamServiceAccountFinalizer); !ok {
 					return ctrl.Result{}, nil

@@ -147,6 +147,51 @@ func hasDependentNatsUsers(ctx context.Context, c client.Client, namespace, acco
 	return false, nil
 }
 
+// hasDependentTeamServiceAccounts returns true if any TeamServiceAccount in the same namespace references the given team by name.
+func hasDependentTeamServiceAccounts(ctx context.Context, c client.Client, namespace, teamName string) (bool, error) {
+	var serviceAccounts natsv1.TeamServiceAccountList
+	if err := c.List(ctx, &serviceAccounts, client.InNamespace(namespace)); err != nil {
+		return false, err
+	}
+	for _, sa := range serviceAccounts.Items {
+		if sa.Spec.TeamRef != nil && sa.Spec.TeamRef.Name == teamName {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// hasDependentAppUserRoleBindingSubjects returns true if any AppUserRoleBinding in the same namespace references the given TeamServiceAccount by name as its subject.
+func hasDependentAppUserRoleBindingSubjects(ctx context.Context, c client.Client, namespace, serviceAccountName string) (bool, error) {
+	var bindings natsv1.AppUserRoleBindingList
+	if err := c.List(ctx, &bindings, client.InNamespace(namespace)); err != nil {
+		return false, err
+	}
+	for _, binding := range bindings.Items {
+		if binding.Spec.SubjectRef != nil && binding.Spec.SubjectRef.Name == serviceAccountName {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// hasDependentAppUserRoleBindingTargets returns true if any AppUserRoleBinding in the same namespace references the given target by name and scope.
+func hasDependentAppUserRoleBindingTargets(ctx context.Context, c client.Client, namespace, targetName string, scope natsv1.AppUserRoleBindingScope) (bool, error) {
+	var bindings natsv1.AppUserRoleBindingList
+	if err := c.List(ctx, &bindings, client.InNamespace(namespace)); err != nil {
+		return false, err
+	}
+	for _, binding := range bindings.Items {
+		if binding.Spec.Scope != scope {
+			continue
+		}
+		if binding.Spec.TargetRef != nil && binding.Spec.TargetRef.Name == targetName {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // checkAccountDependents returns an error describing any resources that still reference the account.
 func checkAccountDependents(ctx context.Context, c client.Client, namespace, accountName string) error {
 	hasStreams, err := hasDependentStreams(ctx, c, namespace, accountName)
@@ -165,9 +210,43 @@ func checkAccountDependents(ctx context.Context, c client.Client, namespace, acc
 	if err != nil {
 		return fmt.Errorf("failed to check dependent nats users: %w", err)
 	}
+	hasBindings, err := hasDependentAppUserRoleBindingTargets(ctx, c, namespace, accountName, natsv1.ScopeAccount)
+	if err != nil {
+		return fmt.Errorf("failed to check dependent app user role bindings: %w", err)
+	}
 
-	if hasStreams || hasKVs || hasObjs || hasUsers {
+	if hasStreams || hasKVs || hasObjs || hasUsers || hasBindings {
 		return fmt.Errorf("waiting for dependent resources to be deleted before removing Account %q", accountName)
+	}
+	return nil
+}
+
+// checkTeamDependents returns an error describing any resources that still reference the team.
+func checkTeamDependents(ctx context.Context, c client.Client, namespace, teamName string) error {
+	hasServiceAccounts, err := hasDependentTeamServiceAccounts(ctx, c, namespace, teamName)
+	if err != nil {
+		return fmt.Errorf("failed to check dependent team service accounts: %w", err)
+	}
+	hasBindings, err := hasDependentAppUserRoleBindingTargets(ctx, c, namespace, teamName, natsv1.ScopeTeam)
+	if err != nil {
+		return fmt.Errorf("failed to check dependent app user role bindings: %w", err)
+	}
+
+	if hasServiceAccounts || hasBindings {
+		return fmt.Errorf("waiting for dependent resources to be deleted before removing Team %q", teamName)
+	}
+	return nil
+}
+
+// checkTeamServiceAccountDependents returns an error describing any resources that still reference the team service account.
+func checkTeamServiceAccountDependents(ctx context.Context, c client.Client, namespace, serviceAccountName string) error {
+	hasBindings, err := hasDependentAppUserRoleBindingSubjects(ctx, c, namespace, serviceAccountName)
+	if err != nil {
+		return fmt.Errorf("failed to check dependent app user role bindings: %w", err)
+	}
+
+	if hasBindings {
+		return fmt.Errorf("waiting for dependent AppUserRoleBindings to be deleted before removing TeamServiceAccount %q", serviceAccountName)
 	}
 	return nil
 }

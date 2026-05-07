@@ -33,6 +33,7 @@ func setupAccountReconciler(t *testing.T, objs ...client.Object) (*AccountReconc
 			&natsv1.KeyValue{},
 			&natsv1.ObjectStore{},
 			&natsv1.NatsUser{},
+			&natsv1.AppUserRoleBinding{},
 		).
 		WithObjects(objs...).
 		Build()
@@ -146,6 +147,52 @@ func TestAccountReconcileDeletionBlockedByDependents(t *testing.T) {
 	}
 
 	r, _ := setupAccountReconciler(t, account, stream)
+	result, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: account.Name, Namespace: account.Namespace},
+	})
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if result.RequeueAfter != requeueWaitingForResource.RequeueAfter {
+		t.Fatalf("expected waiting requeue, got %v", result.RequeueAfter)
+	}
+
+	var got natsv1.Account
+	if err := r.Get(context.Background(), types.NamespacedName{Name: account.Name, Namespace: account.Namespace}, &got); err != nil {
+		t.Fatalf("get account: %v", err)
+	}
+	if !strings.Contains(got.Status.Message, "waiting for dependent resources") {
+		t.Fatalf("expected dependent resources message, got %q", got.Status.Message)
+	}
+}
+
+func TestAccountReconcileDeletionBlockedByTargetRoleBinding(t *testing.T) {
+	now := metav1.Now()
+	account := &natsv1.Account{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "app-team",
+			Namespace:         "default",
+			Finalizers:        []string{accountFinalizer},
+			DeletionTimestamp: &now,
+		},
+		Status: natsv1.AccountStatus{
+			AccountID: "A-500",
+		},
+	}
+	binding := &natsv1.AppUserRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "account-binding",
+			Namespace: "default",
+		},
+		Spec: natsv1.AppUserRoleBindingSpec{
+			TeamAppUserID: "TAU-1",
+			Scope:         natsv1.ScopeAccount,
+			TargetRef:     &natsv1.AppUserRoleBindingTargetRef{Name: "app-team"},
+			RoleID:        "R-1",
+		},
+	}
+
+	r, _ := setupAccountReconciler(t, account, binding)
 	result, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: account.Name, Namespace: account.Namespace},
 	})

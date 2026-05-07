@@ -48,6 +48,15 @@ func (r *TeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	if !team.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&team, teamFinalizer) {
+			if err := checkTeamDependents(ctx, r.Client, team.Namespace, team.Name); err != nil {
+				l.Info(err.Error())
+				team.Status.Message = err.Error()
+				if err := r.Status().Update(ctx, &team); err != nil {
+					l.Error(err, "failed to update team status")
+				}
+				return requeueWaitingForResource, nil
+			}
+
 			// If we never had a team ID, this resource was never fully reconciled.
 			if team.Status.ID == "" {
 				if ok := controllerutil.RemoveFinalizer(&team, teamFinalizer); !ok {
