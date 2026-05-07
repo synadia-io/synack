@@ -133,6 +133,9 @@ func TestNatsUserReconcileUpdatesSecretAndNoopsWhenUnchanged(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "app-user-creds",
 			Namespace: "default",
+			Annotations: map[string]string{
+				natsUserSecretUIDAnnotation: string(user.UID),
+			},
 		},
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{
@@ -172,6 +175,73 @@ func TestNatsUserReconcileUpdatesSecretAndNoopsWhenUnchanged(t *testing.T) {
 	}
 	if unchanged.ResourceVersion != rv {
 		t.Fatalf("expected secret resourceVersion unchanged, old=%q new=%q", rv, unchanged.ResourceVersion)
+	}
+}
+
+func TestNatsUserReconcileRefusesUnownedCredentialsSecret(t *testing.T) {
+	user := &natsv1.NatsUser{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "app-user",
+			Namespace:  "default",
+			Finalizers: []string{natsUserFinalizer},
+			UID:        types.UID("user-uid-unowned-secret"),
+		},
+		Spec: natsv1.NatsUserSpec{
+			AccountSelector: natsv1.AccountSelector{
+				AccountID: "A-123",
+			},
+			Name: "app-user",
+			CredentialsSecret: &natsv1.NatsUserCredentialsSecret{
+				Name: "app-user-creds",
+			},
+		},
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "app-user-creds",
+			Namespace: "default",
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			"creds": []byte("DO_NOT_OVERWRITE"),
+		},
+	}
+
+	r, fcp := setupNatsUserReconciler(t, user, secret)
+	fcp.ensureNatsUserFn = func(_ context.Context, _ controlplane.NatsUserInput) (controlplane.NatsUserResult, error) {
+		return controlplane.NatsUserResult{NatsUserID: "U-123", AccountID: "A-123"}, nil
+	}
+	fcp.downloadNatsUserCredsFn = func(_ context.Context, _ string) (string, error) {
+		return "NEW_DATA", nil
+	}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: user.Name, Namespace: user.Namespace},
+	})
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	var unchanged corev1.Secret
+	if err := r.Get(context.Background(), types.NamespacedName{Name: "app-user-creds", Namespace: "default"}, &unchanged); err != nil {
+		t.Fatalf("get secret: %v", err)
+	}
+	if got := string(unchanged.Data["creds"]); got != "DO_NOT_OVERWRITE" {
+		t.Fatalf("expected pre-existing data to be preserved, got %q", got)
+	}
+	if len(unchanged.OwnerReferences) != 0 {
+		t.Fatalf("expected no owner references to be added, got %+v", unchanged.OwnerReferences)
+	}
+	if unchanged.Annotations[natsUserSecretUIDAnnotation] != "" {
+		t.Fatalf("expected no nats user UID annotation to be added, got %q", unchanged.Annotations[natsUserSecretUIDAnnotation])
+	}
+
+	var gotUser natsv1.NatsUser
+	if err := r.Get(context.Background(), types.NamespacedName{Name: user.Name, Namespace: user.Namespace}, &gotUser); err != nil {
+		t.Fatalf("get nats user: %v", err)
+	}
+	if !strings.Contains(gotUser.Status.Message, "already exists and is not owned") {
+		t.Fatalf("expected ownership error in status, got %q", gotUser.Status.Message)
 	}
 }
 

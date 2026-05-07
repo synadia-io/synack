@@ -404,6 +404,10 @@ func (r *NatsUserReconciler) reconcileCredentialsSecret(ctx context.Context, nat
 	}
 
 	updated := existing.DeepCopy()
+	if !ownedByNatsUser(updated, natsUser) {
+		return false, fmt.Errorf("credentials secret %q already exists and is not owned by NatsUser %q", secretNN.String(), natsUser.Name)
+	}
+
 	changed := false
 
 	if updated.Labels == nil {
