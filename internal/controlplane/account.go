@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/synadia-io/control-plane-sdk-go/syncp"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -35,25 +34,13 @@ func (c *client) EnsureAccount(ctx context.Context, in AccountInput) (AccountRes
 		if err != nil {
 			err = withAPIError(err)
 			if isStatusCode(err, http.StatusNotFound) {
-				l.Info("known account ID not found, recreating by name", "resourceID", in.AccountID)
+				l.Info("known account ID not found, creating new account", "resourceID", in.AccountID)
 				in.AccountID = ""
 			} else {
 				return AccountResult{}, fmt.Errorf("get account %q: %w", in.AccountID, err)
 			}
 		} else {
 			return AccountResult{AccountID: acc.Id}, nil
-		}
-	}
-
-	list, _, err := c.api.SystemAPI.ListAccounts(authCtx, in.SystemID).Execute()
-	if err != nil {
-		err = withAPIError(err)
-		return AccountResult{}, fmt.Errorf("list accounts: %w", err)
-	}
-
-	for _, a := range list.Items {
-		if a.Name == in.Name {
-			return AccountResult{AccountID: a.Id}, nil
 		}
 	}
 
@@ -79,36 +66,15 @@ func (c *client) DeleteAccount(ctx context.Context, in AccountInput) error {
 
 	accountID := in.AccountID
 	if accountID == "" {
-		list, _, err := c.api.SystemAPI.ListAccounts(authCtx, in.SystemID).Execute()
-		if err != nil {
-			err = withAPIError(err)
-			return fmt.Errorf("list accounts for delete: %w", err)
-		}
-
-		found := make([]string, 0)
-		for _, a := range list.Items {
-			if a.Name == in.Name {
-				found = append(found, a.Id)
-			}
-		}
-
-		if len(found) == 0 {
-			return nil
-		}
-
-		if len(found) > 1 {
-			return fmt.Errorf("multiple accounts found with name %q in system %q: %s", in.Name, in.SystemID, strings.Join(found, ", "))
-		}
-
-		accountID = found[0]
+		return nil
 	}
 
 	_, err = c.api.AccountAPI.DeleteAccount(authCtx, accountID).Execute()
+	err = withAPIError(err)
 	if err == nil || isStatusCode(err, http.StatusNotFound) {
 		l.Info("account deleted", "resourceID", accountID, "systemID", in.SystemID)
 		return nil
 	}
-	err = withAPIError(err)
 
 	return fmt.Errorf("delete account %q: %w", accountID, err)
 }
@@ -132,24 +98,6 @@ func (c *client) ReadAccountState(ctx context.Context, in AccountInput) ([]byte,
 		if err != nil {
 			return nil, false, err
 		}
-		return state, true, nil
-	}
-
-	list, _, err := c.api.SystemAPI.ListAccounts(authCtx, in.SystemID).Execute()
-	if err != nil {
-		err = withAPIError(err)
-		return nil, false, fmt.Errorf("list accounts: %w", err)
-	}
-
-	for _, a := range list.Items {
-		if a.Name != in.Name {
-			continue
-		}
-		state, err := json.Marshal(a)
-		if err != nil {
-			return nil, false, err
-		}
-
 		return state, true, nil
 	}
 
