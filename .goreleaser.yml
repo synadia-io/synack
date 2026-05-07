@@ -17,7 +17,7 @@ dockers_v2:
     images:
       - "{{ .Env.ECR_REGISTRY }}/synack"
     tags:
-      - "{{ .Tag }}"
+      - "{{ .Version }}"
       - latest
     platforms:
       - linux/amd64
