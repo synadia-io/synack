@@ -9,7 +9,7 @@ type ObjectStoreSpec struct {
 	AccountSelector `json:",inline"`
 
 	// ObjectStoreID optionally pins this resource to an existing Control Plane object store ID.
-	ObjectStoreID string `json:"ObjectStoreId,omitempty"`
+	ObjectStoreID string `json:"objectStoreId,omitempty"`
 
 	// Bucket is the object store bucket name.
 	// +kubebuilder:validation:Required
@@ -43,7 +43,7 @@ type ObjectStoreSpec struct {
 // ObjectStoreStatus reflects observed state from reconciliation.
 type ObjectStoreStatus struct {
 	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
-	ObjectStoreID      string `json:"ObjectStoreId,omitempty"`
+	ObjectStoreID      string `json:"objectStoreId,omitempty"`
 	LastSynced         string `json:"lastSynced,omitempty"`
 	Message            string `json:"message,omitempty"`
 }
@@ -52,7 +52,7 @@ type ObjectStoreStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced,shortName=objectstore
 // +kubebuilder:printcolumn:name="Bucket",type="string",JSONPath=".spec.bucket"
-// +kubebuilder:printcolumn:name="ObjectStoreID",type="string",JSONPath=".status.ObjectStoreId"
+// +kubebuilder:printcolumn:name="ObjectStoreID",type="string",JSONPath=".status.objectStoreId"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // ObjectStore is the Schema for object store resources.

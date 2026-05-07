@@ -20,7 +20,7 @@ spec:
     - jsonPath: .spec.bucket
       name: Bucket
       type: string
-    - jsonPath: .status.ObjectStoreId
+    - jsonPath: .status.objectStoreId
       name: ObjectStoreID
       type: string
     - jsonPath: .metadata.creationTimestamp
@@ -52,10 +52,6 @@ spec:
             description: ObjectStoreSpec captures desired Object Store behavior in
               Control Plane terms.
             properties:
-              ObjectStoreId:
-                description: ObjectStoreID optionally pins this resource to an existing
-                  Control Plane object store ID.
-                type: string
               accountId:
                 description: AccountID identifies the target Control Plane account
                   ID.
@@ -94,6 +90,10 @@ spec:
                   type: string
                 description: Metadata stores arbitrary bucket metadata.
                 type: object
+              objectStoreId:
+                description: ObjectStoreID optionally pins this resource to an existing
+                  Control Plane object store ID.
+                type: string
               placement:
                 description: Placement controls cluster and tag placement requirements.
                 properties:
@@ -126,11 +126,11 @@ spec:
           status:
             description: ObjectStoreStatus reflects observed state from reconciliation.
             properties:
-              ObjectStoreId:
-                type: string
               lastSynced:
                 type: string
               message:
+                type: string
+              objectStoreId:
                 type: string
               observedGeneration:
                 format: int64
