@@ -2,34 +2,23 @@
 
 A Kubernetes operator for managing [Synadia Control Plane](https://www.synadia.com/platform) and [Synadia Cloud](https://cloud.synadia.com) resources declaratively. Synack reconciles CRDs in your cluster against the Control Plane API, providing management for accounts, streams, consumers, KV buckets, object stores, NATS users, teams, service accounts, and role bindings.
 
-## Installation
+### Getting started
 
-### Dev Deployment
+Set URL and Token values
 
-```sh
-kubectl create namespace synack-system
-kubectl -n synack-system create secret generic synack-token \
-  --from-literal=SYNACK_TOKEN=<your-control-plane-token>
-kubectl apply -k config/default
+#### values.yaml:
+```yaml
+config:
+  controlPlaneBaseURL: https://control-plane.example.com
+  token: my-access-token
 ```
 
-The default manifests deploy `registry.synadia.io/synack:v0.1.0`, enable leader election, and expect the Control Plane token in the `synack-token` Secret. By default the Deployment reads that Secret through the `SYNACK_TOKEN` environment variable.
-
-### Build a local image
+Install with Helm
 
 ```sh
-make docker-build IMG=synack:dev
-kubectl -n synack-system set image deployment/synack-controller-manager manager=synack:dev
-```
-
-To deploy from another registry with Kustomize, create an overlay and set the image there:
-
-```sh
-mkdir -p config/local
-printf 'resources:\n- ../default\n' > config/local/kustomization.yaml
-cd config/local
-kustomize edit set image synack=example.com/synack:v0.1.0
-kubectl apply -k .
+helm repo add synadia https://synadia-io.github.io/helm-charts
+helm repo update
+helm upgrade --install -f values.yaml synack synadia/synack
 ```
 
 ### Run the operator
@@ -330,3 +319,31 @@ Every resource reports its reconciliation state in `.status`:
 | `message` | `"applied"` on success, or an error description |
 | `lastSynced` | RFC 3339 timestamp of last successful reconciliation |
 | Resource ID (varies) | The Control Plane ID assigned after creation (e.g. `streamId`, `accountId`) |
+
+### Dev Deployment
+
+```sh
+kubectl create namespace synack-system
+kubectl -n synack-system create secret generic synack-token \
+  --from-literal=SYNACK_TOKEN=<your-control-plane-token>
+kubectl apply -k config/default
+```
+
+The default manifests deploy `registry.synadia.io/synack:v0.1.0`, enable leader election, and expect the Control Plane token in the `synack-token` Secret. By default the Deployment reads that Secret through the `SYNACK_TOKEN` environment variable.
+
+### Build a local image
+
+```sh
+make docker-build IMG=synack:dev
+kubectl -n synack-system set image deployment/synack-controller-manager manager=synack:dev
+```
+
+To deploy from another registry with Kustomize, create an overlay and set the image there:
+
+```sh
+mkdir -p config/local
+printf 'resources:\n- ../default\n' > config/local/kustomization.yaml
+cd config/local
+kustomize edit set image synack=example.com/synack:v0.1.0
+kubectl apply -k .
+```
