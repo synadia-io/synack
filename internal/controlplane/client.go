@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/synadia-io/control-plane-sdk-go/syncp"
-	"github.com/tidwall/gjson"
 )
 
 var ErrAccountNotFound = errors.New("account not found in control plane")
@@ -62,6 +61,8 @@ type Client interface {
 	EnsureAppUserRoleBinding(ctx context.Context, in AppUserRoleBindingInput) (AppUserRoleBindingResult, error)
 	DeleteAppUserRoleBinding(ctx context.Context, in AppUserRoleBindingInput) error
 	ReadAppUserRoleBindingState(ctx context.Context, in AppUserRoleBindingInput) ([]byte, bool, error)
+
+	ValidateToken(ctx context.Context) error
 }
 
 type Options struct {
@@ -95,16 +96,17 @@ func NewClient(opts Options) (Client, error) {
 		cfg.Host = u.Host
 	}
 
-	return &client{
+	c := &client{
 		api:   syncp.NewAPIClient(cfg),
 		token: token,
-	}, nil
+	}
+
+	return c, nil
 }
 
 type apiError struct {
 	err  error
 	code int
-	body string
 }
 
 func withAPIError(err error) error {
@@ -116,7 +118,7 @@ func withAPIError(err error) error {
 		return apiErr
 	}
 
-	openAPIErr, value := openAPIError(err)
+	openAPIErr := openAPIError(err)
 	if openAPIErr == nil {
 		return err
 	}
@@ -124,7 +126,6 @@ func withAPIError(err error) error {
 	return &apiError{
 		err:  err,
 		code: openAPIErr.Code(),
-		body: value,
 	}
 }
 
@@ -132,10 +133,10 @@ func (e *apiError) Error() string {
 	if e == nil || e.err == nil {
 		return ""
 	}
-	if e.body == "" {
+	if e.code == 0 {
 		return e.err.Error()
 	}
-	return fmt.Sprintf("%s (error: %s)", e.err.Error(), e.body)
+	return fmt.Sprintf("%s (status: %d)", e.err.Error(), e.code)
 }
 
 func (e *apiError) Unwrap() error {
@@ -152,18 +153,13 @@ func (e *apiError) Code() int {
 	return e.code
 }
 
-func openAPIError(err error) (*syncp.GenericOpenAPIError, string) {
+func openAPIError(err error) *syncp.GenericOpenAPIError {
 	var openAPIError *syncp.GenericOpenAPIError
 	if !errors.As(err, &openAPIError) || openAPIError == nil {
-		return nil, ""
+		return nil
 	}
 
-	field := gjson.GetBytes(openAPIError.Body(), "error")
-	if !field.Exists() {
-		return openAPIError, ""
-	}
-
-	return openAPIError, field.String()
+	return openAPIError
 }
 
 func (c *client) resolveAccountID(ctx context.Context, sel AccountSelectors) (string, error) {
@@ -196,6 +192,19 @@ func (c *client) resolveAccountID(ctx context.Context, sel AccountSelectors) (st
 
 func (c *client) authContext(ctx context.Context) (context.Context, error) {
 	return context.WithValue(ctx, syncp.ContextAccessToken, c.token), nil
+}
+
+func (c *client) ValidateToken(ctx context.Context) error {
+	authCtx, err := c.authContext(ctx)
+	if err != nil {
+		return fmt.Errorf("validate control plane token: %w", err)
+	}
+
+	if _, _, err := c.api.SessionAPI.GetVersion(authCtx).Execute(); err != nil {
+		return fmt.Errorf("validate control plane token: %w", withAPIError(err))
+	}
+
+	return nil
 }
 
 func tokenFromSource(envName, fileName string) (string, error) {

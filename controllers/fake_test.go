@@ -48,6 +48,10 @@ type fakeControlPlaneClient struct {
 	ensureAppUserRoleBindingHit int
 }
 
+func (f *fakeControlPlaneClient) ValidateToken(context.Context) error {
+	return nil
+}
+
 func (f *fakeControlPlaneClient) EnsureStream(ctx context.Context, in controlplane.StreamInput) (controlplane.StreamResult, error) {
 	f.ensureStreamHit++
 	f.ensureStreamIn = append(f.ensureStreamIn, in)

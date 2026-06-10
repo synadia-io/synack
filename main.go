@@ -62,6 +62,7 @@ func main() {
 	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	setupLog := ctrl.Log.WithName("setup")
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -71,6 +72,7 @@ func main() {
 		LeaderElectionID:       "synack-controller-manager",
 	})
 	if err != nil {
+		setupLog.Error(err, "unable to create manager")
 		os.Exit(1)
 	}
 
@@ -81,6 +83,7 @@ func main() {
 		TokenFile: tokenFile,
 	})
 	if err != nil {
+		setupLog.Error(err, "unable to create control plane client")
 		os.Exit(1)
 	}
 
@@ -161,6 +164,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("control-plane", newControlPlaneReadiness(cpClient, cpBaseURL, setupLog).Check); err != nil {
 		os.Exit(1)
 	}
 

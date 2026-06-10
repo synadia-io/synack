@@ -4,17 +4,32 @@ A Kubernetes operator for managing [Synadia Control Plane](https://www.synadia.c
 
 ## Installation
 
-### Install CRDs
+### Dev Deployment
 
 ```sh
-kubectl apply -f config/crd/bases/
+kubectl create namespace synack-system
+kubectl -n synack-system create secret generic synack-token \
+  --from-literal=SYNACK_TOKEN=<your-control-plane-token>
+kubectl apply -k config/default
 ```
 
-### Create the token secret
+The default manifests deploy `registry.synadia.io/synack:v0.1.0`, enable leader election, and expect the Control Plane token in the `synack-token` Secret. By default the Deployment reads that Secret through the `SYNACK_TOKEN` environment variable.
+
+### Build a local image
 
 ```sh
-kubectl create secret generic synack-token \
-  --from-literal=SYNACK_TOKEN=<your-control-plane-token>
+make docker-build IMG=synack:dev
+kubectl -n synack-system set image deployment/synack-controller-manager manager=synack:dev
+```
+
+To deploy from another registry with Kustomize, create an overlay and set the image there:
+
+```sh
+mkdir -p config/local
+printf 'resources:\n- ../default\n' > config/local/kustomization.yaml
+cd config/local
+kustomize edit set image synack=example.com/synack:v0.1.0
+kubectl apply -k .
 ```
 
 ### Run the operator
@@ -25,11 +40,14 @@ The operator binary accepts the following flags:
 |---|---|---|
 | `--control-plane-base-url` | `https://cloud.synadia.com` | Control Plane API base URL |
 | `--token-var` | `SYNACK_TOKEN` | Environment variable name containing the API token |
+| `--token-file` | empty | File containing the API token; takes precedence over `--token-var` |
 | `--reconcile-interval` | `1m` | Interval between drift-detection reconciliations |
 | `--timeout` | `30s` | Timeout for Control Plane API requests |
 | `--leader-elect` | `false` | Enable leader election for HA deployments |
 | `--metrics-bind-address` | `:8080` | Metrics endpoint bind address |
 | `--health-probe-bind-address` | `:8081` | Health/readiness probe bind address |
+
+Synack validates the configured Control Plane token through its readiness check. The pod stays alive but does not become Ready until the token can authenticate.
 
 ## Resources
 
